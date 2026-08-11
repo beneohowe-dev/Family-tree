@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f8fc">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=25">
+    <link rel="stylesheet" href="styles.css?v=27">
   </head>
   <body data-theme="gallery">
     <a class="skip-link" href="#main">Skip to family tree</a>
@@ -15,28 +15,21 @@
         <div class="brand">
           <span class="family-mark" aria-hidden="true">FT</span>
           <div>
-            <p class="eyebrow">Private family tree</p>
+            <p class="eyebrow">Shared family tree</p>
             <h1>Family Tree</h1>
           </div>
         </div>
 
         <div class="topbar-actions">
-          <label class="search-box" for="globalSearch" data-tooltip="Search only shows people and details you are allowed to see.">
+          <label class="search-box" for="globalSearch" data-tooltip="Search names, places and dates in this family tree.">
             <span class="visually-hidden">Search family</span>
             <input id="globalSearch" type="search" autocomplete="off" placeholder="Find a person">
           </label>
           <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
-          <button class="button" id="saveButton" type="button" data-tooltip="Save the latest family tree changes on this device.">Save</button>
-          <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a private link to this family tree view.">Share link</button>
-          <button class="button primary" id="youButton" type="button" data-tooltip="Centre the map on your claimed profile and show close family.">You</button>
+          <button class="button" id="saveButton" type="button" data-tooltip="Save now. The tree also saves automatically each day on this device.">Save</button>
+          <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a link to this family tree view.">Share link</button>
+          <button class="button primary" id="youButton" type="button" data-tooltip="Centre the map on your profile and show close family.">You</button>
           <button class="button" id="connectionsButton" type="button" data-tooltip="Pick two people and see the family line between them.">How related?</button>
-          <button class="button icon-text" id="accessButton" type="button" aria-label="Invitations and access" data-tooltip="Invite approved family members or review access requests.">
-            <span aria-hidden="true">+</span>
-            <span>Invite</span>
-          </button>
-          <button class="button private-view-button" id="privateLandingButton" type="button" aria-label="View locked private landing page" data-tooltip="Shows what someone sees before family approval. The map stays locked so names, dates and photos stay private.">
-            <span>Locked view</span>
-          </button>
           <span class="save-status" id="saveStatus" aria-live="polite">Saved on this device</span>
         </div>
       </header>
@@ -58,16 +51,7 @@
 
           <div class="map-shell" id="mapShell" tabindex="0" aria-label="Pan and zoom family tree">
             <div class="timeline-axis" aria-hidden="true">
-              <span class="timeline-label y1900">1900</span>
-              <span class="timeline-dot y1900"></span>
-              <span class="timeline-label y1930">1930</span>
-              <span class="timeline-dot y1930"></span>
-              <span class="timeline-label y1960">1960</span>
-              <span class="timeline-dot y1960"></span>
-              <span class="timeline-label y1990">1990</span>
-              <span class="timeline-dot y1990"></span>
-              <span class="timeline-label y2026">2026</span>
-              <span class="timeline-dot y2026"></span>
+              <span class="timeline-axis-title">Birth years</span>
             </div>
             <div class="map-viewport" id="mapViewport">
               <svg id="relationshipLines" viewBox="0 0 1560 980" aria-hidden="true"></svg>
@@ -129,43 +113,17 @@
         <article class="workspace-panel history-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Safety</p>
-              <h2>Gentle editing</h2>
+              <p class="eyebrow">Daily saves</p>
+              <h2>Easy recovery</h2>
             </div>
             <button class="button compact" id="removedButton" type="button">Recently removed</button>
           </div>
           <ol class="activity-list" id="activityList"></ol>
+          <div class="daily-save-list" id="dailySaveList"></div>
           <div class="removed-list" id="removedList" hidden></div>
         </article>
       </section>
     </div>
-
-    <section class="private-gate" id="privateGate" hidden>
-      <div class="private-gate-inner">
-        <span class="family-mark large" aria-hidden="true">FT</span>
-        <p class="eyebrow">Private family tree</p>
-        <h1>Family Tree</h1>
-        <p class="gate-copy">This is the locked view people see before approval. It shares no family names, profiles, photos or relationships.</p>
-        <form id="accessRequestForm" class="gate-form">
-          <label>
-            Name
-            <input name="name" autocomplete="name" required>
-          </label>
-          <label>
-            Email
-            <input name="email" type="email" autocomplete="email" required>
-          </label>
-          <label>
-            Message
-            <textarea name="message" rows="3" placeholder="How are you connected?"></textarea>
-          </label>
-          <div class="form-actions">
-            <button class="button primary" type="submit">Request access</button>
-            <button class="button" id="approvedPreviewButton" type="button">Approved preview</button>
-          </div>
-        </form>
-      </div>
-    </section>
 
     <div class="toast" id="toast" hidden>
       <span id="toastMessage">Saved</span>
@@ -177,7 +135,7 @@
     <div class="demo-coach" id="demoCoach" role="status" aria-live="polite" hidden>
       <p class="demo-count" id="demoStepCount">Step 1 of 7</p>
       <h2 id="demoTitle">Start with You</h2>
-      <p id="demoText">Centre the map on your claimed profile.</p>
+      <p id="demoText">Centre the map on your profile.</p>
       <div class="demo-actions">
         <button class="button primary compact" id="demoNextButton" type="button">Next</button>
         <button class="button compact" id="demoEndButton" type="button">Done</button>
@@ -249,52 +207,8 @@
             <button class="button compact" id="photoRemoveButton" type="button">Remove photo</button>
           </div>
         </div>
-        <p class="form-section-label">Optional extra detail</p>
-        <div class="prompt-grid" id="promptGrid"></div>
-        <label>
-          Type
-          <select name="category" required></select>
-        </label>
-        <label>
-          Label
-          <input name="label" placeholder="Occupation, place, story">
-        </label>
-        <label>
-          Detail
-          <textarea name="value" rows="4" placeholder="Add one extra thing if you want"></textarea>
-        </label>
-        <label>
-          Visibility
-          <select name="visibility">
-            <option value="family">Family</option>
-            <option value="connections">Connections</option>
-            <option value="only_me">Only me</option>
-          </select>
-        </label>
         <div class="form-actions">
           <button class="button primary" value="default" type="submit">Save</button>
-          <button class="button" value="cancel" type="submit">Cancel</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="suggestDialog" class="modal">
-      <form method="dialog" id="suggestForm">
-        <div class="modal-head">
-          <h2>Suggest change</h2>
-          <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
-        </div>
-        <p id="suggestCurrent" class="muted"></p>
-        <label>
-          Suggested value
-          <textarea name="value" rows="4" required></textarea>
-        </label>
-        <label>
-          Message
-          <textarea name="message" rows="3"></textarea>
-        </label>
-        <div class="form-actions">
-          <button class="button primary" value="default" type="submit">Send suggestion</button>
           <button class="button" value="cancel" type="submit">Cancel</button>
         </div>
       </form>
@@ -306,39 +220,54 @@
           <h2>Add a relative</h2>
           <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
         </div>
-        <label>
-          Name
-          <input name="name" autocomplete="off" required>
-        </label>
-        <label>
-          Date of birth
-          <input name="birthDate" type="date">
-        </label>
-        <label>
-          Year if date unknown
-          <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="e.g. 1948">
-        </label>
-        <label>
-          Place of birth
-          <input name="birthPlace" autocomplete="off" placeholder="Town, city or country">
-        </label>
-        <label>
-          Gender
-          <select name="gender">
-            <option value="unknown">Not sure yet</option>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
-          </select>
-        </label>
-        <label>
-          Connection
-          <select name="connection">
-            <option value="child">Child</option>
-            <option value="parent">Parent</option>
-            <option value="partner">Husband, wife or partner</option>
-            <option value="sibling">Sibling</option>
-          </select>
-        </label>
+        <div class="profile-basics-grid">
+          <label>
+            First name
+            <input name="firstName" autocomplete="given-name" placeholder="First name" required>
+          </label>
+          <label>
+            Last name
+            <input name="lastName" autocomplete="family-name" placeholder="Last name">
+          </label>
+          <label class="wide-field">
+            Middle names
+            <input name="middleNames" autocomplete="additional-name" placeholder="Middle names, if known">
+          </label>
+          <label>
+            Date of birth
+            <input name="birthDate" type="date">
+          </label>
+          <label>
+            Year if date unknown
+            <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="e.g. 1948">
+          </label>
+          <label>
+            Place of birth
+            <input name="birthPlace" autocomplete="off" placeholder="Town, city or country">
+          </label>
+          <label>
+            Gender
+            <select name="gender">
+              <option value="unknown">Not sure yet</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </label>
+          <label>
+            <span id="relativeConnectionLabel">Who are they in the family?</span>
+            <select name="connection">
+              <option value="parent">Parent</option>
+              <option value="sibling">Sibling</option>
+              <option value="child">Child</option>
+              <option value="partner">Husband, wife or partner</option>
+              <option value="grandparent">Grandparent</option>
+              <option value="grandchild">Grandchild</option>
+              <option value="aunt_uncle">Aunt or uncle</option>
+              <option value="cousin">Cousin</option>
+              <option value="family_link">Other family</option>
+            </select>
+          </label>
+        </div>
         <div id="duplicateResults" class="duplicate-results" hidden></div>
         <div class="form-actions">
           <button class="button primary" value="default" type="submit">Create new person</button>
@@ -347,36 +276,7 @@
       </form>
     </dialog>
 
-    <dialog id="accessDialog" class="modal wide">
-      <div class="modal-head">
-        <h2>Access</h2>
-        <button class="icon-button" id="closeAccessButton" type="button" aria-label="Close" title="Close">x</button>
-      </div>
-      <div class="access-grid">
-        <form id="inviteForm">
-          <h3>Invite by email</h3>
-          <label>
-            Email
-            <input name="email" type="email" autocomplete="email" required>
-          </label>
-          <label>
-            Role
-            <select name="role">
-              <option value="member">Member</option>
-              <option value="viewer">Viewer</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
-          <button class="button primary" type="submit">Send invitation</button>
-        </form>
-        <section>
-          <h3>Access requests</h3>
-          <div id="accessRequests" class="request-list"></div>
-        </section>
-      </div>
-    </dialog>
-
     <script src="relationship-engine.js?v=2"></script>
-    <script src="app.js?v=25"></script>
+    <script src="app.js?v=27"></script>
   </body>
 </html>

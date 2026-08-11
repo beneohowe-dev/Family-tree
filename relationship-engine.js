@@ -30,7 +30,20 @@
     "partner",
     "former_spouse",
     "former_partner",
-    "sibling"
+    "sibling",
+    "direct_cousin",
+    "direct_aunt_uncle",
+    "direct_grandparent",
+    "direct_grandchild",
+    "direct_family_link"
+  ]);
+
+  var DIRECT_TYPES = new Set([
+    "direct_cousin",
+    "direct_aunt_uncle",
+    "direct_grandparent",
+    "direct_grandchild",
+    "direct_family_link"
   ]);
 
   function activeRelationships(relationships) {
@@ -44,6 +57,7 @@
     var parentsByChild = new Map();
     var childrenByParent = new Map();
     var partnersByPerson = new Map();
+    var directRelationsByPerson = new Map();
     var explicitSiblings = new Map();
     var adjacency = new Map();
 
@@ -52,6 +66,7 @@
       parentsByChild.set(person.id, []);
       childrenByParent.set(person.id, []);
       partnersByPerson.set(person.id, []);
+      directRelationsByPerson.set(person.id, []);
       explicitSiblings.set(person.id, []);
       adjacency.set(person.id, []);
     });
@@ -135,6 +150,33 @@
           type: relationship.type
         });
       }
+
+      if (DIRECT_TYPES.has(relationship.type)) {
+        directRelationsByPerson.get(from).push({
+          id: to,
+          relationshipId: relationship.id,
+          type: relationship.type,
+          direction: "from"
+        });
+        directRelationsByPerson.get(to).push({
+          id: from,
+          relationshipId: relationship.id,
+          type: relationship.type,
+          direction: "to"
+        });
+        adjacency.get(from).push({
+          id: to,
+          relationshipId: relationship.id,
+          direction: relationship.type,
+          type: relationship.type
+        });
+        adjacency.get(to).push({
+          id: from,
+          relationshipId: relationship.id,
+          direction: relationship.type,
+          type: relationship.type
+        });
+      }
     });
 
     return {
@@ -142,6 +184,7 @@
       parentsByChild: parentsByChild,
       childrenByParent: childrenByParent,
       partnersByPerson: partnersByPerson,
+      directRelationsByPerson: directRelationsByPerson,
       explicitSiblings: explicitSiblings,
       adjacency: adjacency
     };
@@ -383,6 +426,47 @@
     };
   }
 
+  function directRelationshipLabel(relation, person) {
+    if (relation.type === "direct_cousin") return "cousin";
+    if (relation.type === "direct_family_link") return "relative";
+    if (relation.type === "direct_aunt_uncle") {
+      return relation.direction === "from"
+        ? gendered(person, "aunt", "uncle", "aunt/uncle")
+        : gendered(person, "niece", "nephew", "niece/nephew");
+    }
+    if (relation.type === "direct_grandparent") {
+      return relation.direction === "from"
+        ? gendered(person, "grandmother", "grandfather", "grandparent")
+        : gendered(person, "granddaughter", "grandson", "grandchild");
+    }
+    if (relation.type === "direct_grandchild") {
+      return relation.direction === "from"
+        ? gendered(person, "granddaughter", "grandson", "grandchild")
+        : gendered(person, "grandmother", "grandfather", "grandparent");
+    }
+    return "relative";
+  }
+
+  function directRecordedRelationship(personAId, personBId, graph) {
+    var relation = (graph.directRelationsByPerson.get(personAId) || []).find(function findDirect(candidate) {
+      return candidate.id === personBId;
+    });
+    if (!relation) return null;
+    var aName = getName(graph, personAId);
+    var bName = getName(graph, personBId);
+    var aPerson = graph.byId.get(personAId);
+    var label = directRelationshipLabel(relation, aPerson);
+    return {
+      type: relation.type.replace(/^direct_/, ""),
+      label: label,
+      sentence: aName + " is " + possessive(bName) + " " + label + ".",
+      explanation: "This connection was added directly as a family role.",
+      path: [personAId, personBId],
+      relationshipIds: [relation.relationshipId],
+      confidence: "recorded"
+    };
+  }
+
   function inLawRelationship(personAId, personBId, graph) {
     var aName = getName(graph, personAId);
     var bName = getName(graph, personBId);
@@ -554,6 +638,9 @@
 
     var partner = directPartner(personAId, personBId, graph);
     if (partner) return partner;
+
+    var direct = directRecordedRelationship(personAId, personBId, graph);
+    if (direct) return direct;
 
     var inLaw = inLawRelationship(personAId, personBId, graph);
     if (inLaw) return inLaw;

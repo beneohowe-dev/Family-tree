@@ -41,6 +41,7 @@ body {
     linear-gradient(180deg, #f7f8fc 0, #ffffff 360px, #f2f5fa 100%),
     var(--bg);
   color: var(--ink);
+  font-weight: 400;
   letter-spacing: 0;
 }
 
@@ -199,7 +200,7 @@ a {
   color: #ffffff;
   font-family: var(--serif);
   font-size: 0.86rem;
-  font-weight: 900;
+  font-weight: 560;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.28),
     0 16px 34px rgba(18, 22, 32, 0.18);
@@ -219,7 +220,7 @@ a {
 .private-gate h1 {
   margin: 0;
   font-family: var(--serif);
-  font-weight: 900;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -232,7 +233,7 @@ a {
   margin: 0 0 3px;
   color: var(--muted);
   font-size: 0.72rem;
-  font-weight: 820;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -252,7 +253,7 @@ a {
   align-self: center;
   color: var(--muted);
   font-size: 0.78rem;
-  font-weight: 760;
+  font-weight: 460;
   white-space: nowrap;
 }
 
@@ -336,7 +337,7 @@ select:focus-visible,
   gap: 8px;
   min-height: 44px;
   padding: 0 15px;
-  font-weight: 720;
+  font-weight: 500;
 }
 
 .button.primary {
@@ -373,7 +374,7 @@ select:focus-visible,
   min-width: 40px;
   height: 44px;
   padding: 0 10px;
-  font-weight: 780;
+  font-weight: 500;
 }
 
 .main-layout {
@@ -420,7 +421,7 @@ select:focus-visible,
   color: #ffffff;
   text-align: center;
   font-size: 0.86rem;
-  font-weight: 730;
+  font-weight: 460;
 }
 
 .map-shell {
@@ -429,10 +430,10 @@ select:focus-visible,
   overflow: hidden;
   border-top: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
   background:
-    linear-gradient(90deg, rgba(244, 246, 250, 0.98) 0 150px, transparent 150px),
+    linear-gradient(90deg, rgba(247, 249, 252, 0.98) 0 150px, rgba(17, 19, 24, 0.055) 150px 151px, transparent 151px),
     linear-gradient(0deg, rgba(17, 19, 24, 0.035) 0 1px, transparent 1px 72px),
     linear-gradient(90deg, rgba(17, 19, 24, 0.035) 0 1px, transparent 1px 72px),
-    linear-gradient(180deg, #ffffff 0, #f5f7fb 100%);
+    linear-gradient(135deg, rgba(255, 241, 248, 0.44) 0%, rgba(255, 255, 255, 0.9) 34%, rgba(237, 248, 255, 0.56) 66%, rgba(223, 245, 236, 0.52) 100%);
   background-size: auto, 72px 72px, 72px 72px, auto;
   touch-action: none;
 }
@@ -444,83 +445,26 @@ select:focus-visible,
   bottom: 32px;
   z-index: 8;
   width: 122px;
-  border-right: 1px solid rgba(32, 34, 42, 0.18);
   color: #6f727c;
   pointer-events: none;
 }
 
-.timeline-axis::before {
-  content: "";
+.timeline-axis-title {
   position: absolute;
-  right: -1px;
-  top: 10px;
-  bottom: 10px;
-  width: 1px;
-  background: linear-gradient(#737783, #20222a);
-  opacity: 0.34;
-}
-
-.timeline-label {
-  position: absolute;
-  right: 16px;
-  width: 96px;
+  left: 0;
+  top: 0;
+  width: 106px;
+  border: 1px solid rgba(17, 19, 24, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  padding: 6px 8px;
+  backdrop-filter: blur(8px);
   text-align: right;
-  font-size: 0.75rem;
-  font-weight: 860;
+  font-size: 0.68rem;
+  font-weight: 440;
   line-height: 1.2;
   letter-spacing: 0;
   text-transform: uppercase;
-}
-
-.timeline-dot {
-  position: absolute;
-  right: -5px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #737783;
-  box-shadow: 0 0 0 4px rgba(32, 34, 42, 0.08);
-}
-
-.timeline-label.y1900,
-.timeline-dot.y1900 {
-  top: 8px;
-}
-
-.timeline-label.y1930,
-.timeline-dot.y1930 {
-  top: 25%;
-}
-
-.timeline-label.y1960,
-.timeline-dot.y1960 {
-  top: 48%;
-}
-
-.timeline-label.y1990,
-.timeline-dot.y1990 {
-  top: 72%;
-}
-
-.timeline-label.y2026,
-.timeline-dot.y2026 {
-  top: calc(100% - 24px);
-}
-
-.timeline-label.y2026 {
-  color: var(--ink);
-}
-
-.timeline-dot.y1930,
-.timeline-dot.y1990 {
-  background: #737783;
-  box-shadow: 0 0 0 4px rgba(32, 34, 42, 0.08);
-}
-
-.timeline-dot.y1960,
-.timeline-dot.y2026 {
-  background: #20222a;
-  box-shadow: 0 0 0 4px rgba(32, 34, 42, 0.08);
 }
 
 .map-shell.is-dragging {
@@ -545,6 +489,85 @@ select:focus-visible,
   overflow: visible;
 }
 
+.timeline-guide-axis {
+  stroke: rgba(17, 19, 24, 0.24);
+  stroke-width: 1.4;
+}
+
+.timeline-guide-line {
+  stroke: rgba(17, 19, 24, 0.085);
+  stroke-width: 1;
+  stroke-dasharray: 6 10;
+}
+
+.timeline-guide-dot {
+  fill: #ffffff;
+  stroke: rgba(17, 19, 24, 0.28);
+  stroke-width: 1.4;
+}
+
+.timeline-guide-label {
+  fill: rgba(17, 19, 24, 0.58);
+  font-size: 18px;
+  font-weight: 360;
+  letter-spacing: 0;
+}
+
+.timeline-person-line {
+  stroke: rgba(17, 19, 24, 0.28);
+  stroke-width: 1.8;
+}
+
+.timeline-person-line.male {
+  stroke: rgba(70, 137, 181, 0.4);
+}
+
+.timeline-person-line.female {
+  stroke: rgba(184, 83, 135, 0.38);
+}
+
+.timeline-person-line.neutral {
+  stroke: rgba(87, 94, 108, 0.3);
+}
+
+.timeline-person-dot {
+  fill: var(--surface);
+  stroke: rgba(17, 19, 24, 0.5);
+  stroke-width: 1.8;
+}
+
+.timeline-person-dot.male {
+  fill: var(--male-soft);
+  stroke: rgba(70, 137, 181, 0.62);
+}
+
+.timeline-person-dot.female {
+  fill: var(--female-soft);
+  stroke: rgba(184, 83, 135, 0.58);
+}
+
+.timeline-person-label {
+  fill: var(--ink);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-linejoin: round;
+  stroke-width: 5;
+  paint-order: stroke;
+  font-size: 17px;
+  font-weight: 430;
+}
+
+.timeline-person-label.male {
+  fill: #376f95;
+}
+
+.timeline-person-label.female {
+  fill: #94466f;
+}
+
+.timeline-person-label.neutral {
+  fill: #4f5664;
+}
+
 .relationship-line {
   stroke: rgba(17, 19, 24, 0.34);
   stroke-width: 2;
@@ -556,6 +579,12 @@ select:focus-visible,
 .relationship-line.partner {
   stroke: rgba(17, 19, 24, 0.32);
   stroke-dasharray: 0;
+}
+
+.relationship-line.direct {
+  stroke: rgba(17, 19, 24, 0.24);
+  stroke-width: 1.7;
+  stroke-dasharray: 7 9;
 }
 
 .relationship-line.muted {
@@ -698,14 +727,14 @@ select:focus-visible,
   white-space: nowrap;
   max-width: 100%;
   font-size: 1.08rem;
-  font-weight: 880;
+  font-weight: 460;
 }
 
 .person-node .node-years {
   min-width: 0;
   color: var(--muted);
   font-size: 0.82rem;
-  font-weight: 680;
+  font-weight: 440;
 }
 
 .node-suggestion {
@@ -716,7 +745,7 @@ select:focus-visible,
   padding-top: 8px;
   color: var(--ink);
   font-size: 0.76rem;
-  font-weight: 820;
+  font-weight: 470;
 }
 
 .person-node .node-tag {
@@ -728,7 +757,7 @@ select:focus-visible,
   color: #07080c;
   padding: 3px 8px;
   font-size: 0.68rem;
-  font-weight: 880;
+  font-weight: 460;
 }
 
 .cluster-node {
@@ -853,6 +882,23 @@ select:focus-visible,
   margin: 14px;
 }
 
+.photo-drop-target {
+  outline: 0 solid transparent;
+  outline-offset: 0;
+}
+
+.photo-drop-target.is-photo-dragging {
+  outline: 3px solid color-mix(in srgb, var(--accent) 46%, white);
+  outline-offset: -7px;
+}
+
+.person-node.is-photo-dragging {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  box-shadow:
+    0 0 0 6px rgba(17, 19, 24, 0.08),
+    0 28px 62px rgba(9, 15, 32, 0.16);
+}
+
 .profile-hero.missing {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(244, 248, 255, 0.92)),
@@ -915,6 +961,31 @@ select:focus-visible,
   bottom: 18px;
   z-index: 2;
   color: var(--ink);
+}
+
+.profile-photo-hint {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  padding: 6px 9px;
+  font-size: 0.72rem;
+  font-weight: 460;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.profile-hero:hover .profile-photo-hint,
+.profile-hero.is-photo-dragging .profile-photo-hint {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .profile-title h2 {
@@ -1091,7 +1162,7 @@ label {
   gap: 6px;
   color: var(--muted);
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 460;
 }
 
 input,
@@ -1264,12 +1335,12 @@ textarea {
   background: var(--surface);
   padding: 7px 10px;
   color: var(--ink);
-  font-weight: 720;
+  font-weight: 470;
 }
 
 .insight-chip small {
   color: var(--muted);
-  font-weight: 700;
+  font-weight: 440;
 }
 
 .activity-list {
@@ -1299,10 +1370,35 @@ textarea {
 }
 
 .removed-list,
+.daily-save-list,
 .request-list {
   display: grid;
   gap: 8px;
   margin-top: 12px;
+}
+
+.daily-save-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(223, 245, 236, 0.38), rgba(255, 241, 248, 0.34)),
+    var(--surface);
+  padding: 10px;
+}
+
+.daily-save-card strong,
+.daily-save-card small {
+  display: block;
+}
+
+.daily-save-card small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .private-gate {
@@ -1439,7 +1535,7 @@ textarea {
   margin: 4px 0 -2px;
   color: var(--muted);
   font-size: 0.76rem;
-  font-weight: 820;
+  font-weight: 460;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -1473,7 +1569,7 @@ textarea {
   color: var(--ink);
   text-align: left;
   padding: 10px;
-  font-weight: 720;
+  font-weight: 460;
 }
 
 .duplicate-results {
@@ -1539,7 +1635,7 @@ textarea {
   padding: 9px 10px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
   font-size: 0.78rem;
-  font-weight: 680;
+  font-weight: 460;
   line-height: 1.35;
   pointer-events: none;
 }
@@ -1575,7 +1671,7 @@ textarea {
   margin: 0 0 8px !important;
   color: var(--accent-strong) !important;
   font-size: 0.75rem;
-  font-weight: 780;
+  font-weight: 460;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -1665,10 +1761,10 @@ textarea {
     height: 62dvh;
     min-height: 460px;
     background:
-      linear-gradient(90deg, rgba(244, 246, 250, 0.98) 0 106px, transparent 106px),
+      linear-gradient(90deg, rgba(247, 249, 252, 0.98) 0 106px, rgba(17, 19, 24, 0.055) 106px 107px, transparent 107px),
       linear-gradient(0deg, rgba(17, 19, 24, 0.035) 0 1px, transparent 1px 72px),
       linear-gradient(90deg, rgba(17, 19, 24, 0.035) 0 1px, transparent 1px 72px),
-      linear-gradient(180deg, #ffffff 0, #f5f7fb 100%);
+      linear-gradient(135deg, rgba(255, 241, 248, 0.44) 0%, rgba(255, 255, 255, 0.9) 34%, rgba(237, 248, 255, 0.56) 66%, rgba(223, 245, 236, 0.52) 100%);
   }
 
   .timeline-axis {
@@ -1676,10 +1772,15 @@ textarea {
     width: 78px;
   }
 
-  .timeline-label {
-    right: 12px;
-    width: 62px;
-    font-size: 0.65rem;
+  .timeline-axis-title {
+    width: 74px;
+    padding: 5px 6px;
+    font-size: 0.58rem;
+  }
+
+  .timeline-guide-label,
+  .timeline-person-label {
+    font-size: 15px;
   }
 
   .connection-picker,

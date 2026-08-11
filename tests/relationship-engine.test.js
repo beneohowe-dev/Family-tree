@@ -99,6 +99,16 @@ test("sibling-in-law is detected through a partner sibling path", () => {
   assert.deepEqual(result.path, ["alex", "jordan", "taylor"]);
 });
 
+test("direct family roles are described from recorded labels", () => {
+  const result = describeRelationship("alex", "ben", people, relationships.concat([
+    rel("alex", "ben", "direct_cousin")
+  ]));
+  assert.equal(result.label, "cousin");
+  assert.equal(result.sentence, "Alex Stone is Ben Howe's cousin.");
+  assert.equal(result.confidence, "recorded");
+  assert.deepEqual(result.path, ["alex", "ben"]);
+});
+
 test("shortest path still exposes ambiguous graph connectivity", () => {
   const graph = createGraph(people, relationships);
   assert.deepEqual(shortestPath("ben", "sarah", graph), ["ben", "emma", "margaret", "arthur", "william", "peter", "sarah"]);
