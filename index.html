@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f8fc">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=22">
+    <link rel="stylesheet" href="styles.css?v=25">
   </head>
   <body data-theme="gallery">
     <a class="skip-link" href="#main">Skip to family tree</a>
@@ -26,6 +26,8 @@
             <input id="globalSearch" type="search" autocomplete="off" placeholder="Find a person">
           </label>
           <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
+          <button class="button" id="saveButton" type="button" data-tooltip="Save the latest family tree changes on this device.">Save</button>
+          <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a private link to this family tree view.">Share link</button>
           <button class="button primary" id="youButton" type="button" data-tooltip="Centre the map on your claimed profile and show close family.">You</button>
           <button class="button" id="connectionsButton" type="button" data-tooltip="Pick two people and see the family line between them.">How related?</button>
           <button class="button icon-text" id="accessButton" type="button" aria-label="Invitations and access" data-tooltip="Invite approved family members or review access requests.">
@@ -35,6 +37,7 @@
           <button class="button private-view-button" id="privateLandingButton" type="button" aria-label="View locked private landing page" data-tooltip="Shows what someone sees before family approval. The map stays locked so names, dates and photos stay private.">
             <span>Locked view</span>
           </button>
+          <span class="save-status" id="saveStatus" aria-live="polite">Saved on this device</span>
         </div>
       </header>
 
@@ -172,7 +175,7 @@
     <div class="tooltip-bubble" id="tooltipBubble" role="tooltip" hidden></div>
 
     <div class="demo-coach" id="demoCoach" role="status" aria-live="polite" hidden>
-      <p class="demo-count" id="demoStepCount">Step 1 of 6</p>
+      <p class="demo-count" id="demoStepCount">Step 1 of 7</p>
       <h2 id="demoTitle">Start with You</h2>
       <p id="demoText">Centre the map on your claimed profile.</p>
       <div class="demo-actions">
@@ -201,8 +204,16 @@
             <input name="middleNames" autocomplete="additional-name" placeholder="Middle names, if known">
           </label>
           <label>
-            Birth year
-            <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="Optional">
+            Date of birth
+            <input name="birthDate" type="date">
+          </label>
+          <label>
+            Year if date unknown
+            <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="e.g. 1948">
+          </label>
+          <label class="wide-field">
+            Place of birth
+            <input name="birthPlace" autocomplete="off" placeholder="Town, city or country">
           </label>
           <label>
             Gender
@@ -212,6 +223,31 @@
               <option value="male">Male</option>
             </select>
           </label>
+        </div>
+        <div class="photo-upload-card">
+          <label>
+            Profile photo
+            <input id="profilePhotoInput" name="profilePhoto" type="file" accept="image/*">
+          </label>
+          <p class="field-help">On a phone, choose from Photos or take a picture. Use crop only if the face needs centering.</p>
+          <div class="photo-cropper" id="photoCropper" hidden>
+            <canvas id="photoPreviewCanvas" width="640" height="640" aria-label="Photo crop preview"></canvas>
+            <div class="crop-controls">
+              <label>
+                Zoom
+                <input id="photoZoom" type="range" min="1" max="2.6" step="0.05" value="1">
+              </label>
+              <label>
+                Left / right
+                <input id="photoX" type="range" min="-50" max="50" step="1" value="0">
+              </label>
+              <label>
+                Up / down
+                <input id="photoY" type="range" min="-50" max="50" step="1" value="0">
+              </label>
+            </div>
+            <button class="button compact" id="photoRemoveButton" type="button">Remove photo</button>
+          </div>
         </div>
         <p class="form-section-label">Optional extra detail</p>
         <div class="prompt-grid" id="promptGrid"></div>
@@ -275,8 +311,16 @@
           <input name="name" autocomplete="off" required>
         </label>
         <label>
-          Birth year
-          <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="Optional">
+          Date of birth
+          <input name="birthDate" type="date">
+        </label>
+        <label>
+          Year if date unknown
+          <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="e.g. 1948">
+        </label>
+        <label>
+          Place of birth
+          <input name="birthPlace" autocomplete="off" placeholder="Town, city or country">
         </label>
         <label>
           Gender
@@ -333,6 +377,6 @@
     </dialog>
 
     <script src="relationship-engine.js?v=2"></script>
-    <script src="app.js?v=22"></script>
+    <script src="app.js?v=25"></script>
   </body>
 </html>

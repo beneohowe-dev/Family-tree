@@ -1,79 +1,102 @@
-# Motion Community OS Architecture
+# Private Collaborative Family Network Architecture
 
-## Product Principle
+## Product Shape
 
-The central question is: what could this person or organisation contribute to Motion or the Foundation?
+The core loop is deliberately simple:
 
-People and organisations are graph entities. Roles, skills, evidence, relationships, scores, privacy status, and outreach plans are separate records. A person can be an athlete, product tester, ambassador, adviser, and Foundation advocate at the same time.
+1. See the family map.
+2. Find yourself.
+3. Explore people and connections.
+4. Add one small contribution.
 
-## Application Layers
+The tree stays lightweight: photo, name, optional years, and relationships. All richer information lives in the profile panel.
 
-1. Next.js app router for the private workspace.
-2. Supabase Auth for identity and role-based access.
-3. Supabase PostgreSQL for graph entities, evidence, searches, imports, and audit history.
-4. Durable Node/TypeScript workers for scan jobs, enrichment queues, and batch AI analysis.
-5. Provider adapters for permitted search, API, feed, import, and manual sources.
+## Recommended Production Stack
 
-The prototype currently runs with synthetic in-repo seed data. Production should replace the seed data with Supabase reads and server-side mutation workflows.
+- Next.js with TypeScript for app routes, server actions, and responsive UI.
+- Supabase for PostgreSQL, authentication, storage, and row-level security.
+- Object storage with original uploads plus optimized image variants.
+- Netlify or Vercel for initial hosting.
+- Scheduled database backups, media replication, and tested restore drills.
 
-## AI Architecture
+This prototype is dependency-free so it can be opened and reviewed immediately. The schema in `database/schema.sql` is the intended production data foundation.
 
-Do not use one giant AI prompt. Use structured, auditable functions:
+## Data Model
 
-1. Discovery agent finds candidate URLs and source records.
-2. Entity agent extracts people, organisations, events, campaigns, and funding.
-3. Resolution agent compares candidates against existing records.
-4. Classification agent maps potential Motion and Foundation contributions.
-5. Evidence agent checks factual support and confidence.
-6. Red-team agent challenges exploitation, tokenism, timing, privacy, and reputational risks.
-7. Relationship agent calculates warmth, proximity, and introduction routes.
-8. Opportunity agent turns signals into possible actions.
-9. Outreach strategist drafts respectful approach strategy without sending anything.
-10. Digest agent chooses the smallest useful daily briefing.
+The family is a graph:
 
-All AI outputs should be JSON validated against typed schemas before writing to database tables.
+- `person` is the node.
+- `relationship` is the edge.
+- Parent, partner, sibling, adoptive, step, foster, and guardian connections are relationship kinds, not hard-coded gender assumptions.
 
-## Source Adapter Contract
+Personal fields and structural relationships are separated:
 
-Every adapter must declare:
+- Personal information belongs to the claimed profile owner or profile steward.
+- Relationships are shared structural data and are versioned separately.
+- Suggestions never overwrite owner-controlled fields silently.
 
-- source name
-- permitted access method
-- API/feed/import/manual/web-search type
-- required credentials
-- rate limits and budgets
-- allowed data
-- prohibited uses
-- retention restrictions
-- last successful run
-- errors
+## Privacy Model
 
-Adapters must fail closed. If an approved access route is unavailable, the user sees: "Source currently unavailable through an approved automated method."
+Privacy must be enforced server-side.
 
-## Discovery Pipeline
+- `family`: approved members of the Family Space.
+- `connections`: members inside a future relationship boundary.
+- `only_me`: visible only to the owning user.
 
-1. Queue enabled watch topics.
-2. Search permitted sources within daily budgets.
-3. Collect candidate URLs.
-4. Deduplicate before AI analysis.
-5. Extract named people, organisations, events, campaigns, policy changes, and funding.
-6. Match against existing entities.
-7. Add evidence to existing entities.
-8. Create new candidates in Discovered -> Review Required state.
-9. Recalculate fit scores and relationship warmth.
-10. Generate a concise daily digest.
+Search, autocomplete, filters, aggregates, analytics, and relationship calculations should all use the same permission-filtered data access layer. Sensitive fields should be excluded from aggregation unless a future privacy review approves a safe suppression rule.
 
-Do not rescan every profile every day. Watchlist records run daily, priority community weekly, general database monthly, archive only when manually requested.
+## Rendering Large Families
 
-## Privacy Boundary
+The map should behave like a human map, not an old genealogy chart.
 
-Community research and outreach eligibility are separate. A person can appear in research results for public professional work while remaining blocked from outreach. Sensitive information requires explicit evidence, source URL, source date, and review status. The system must never infer disability, medical condition, sexuality, race/ethnicity, religion, political affiliation, or gender identity from appearance, name, associations, followers, or model output.
+Recommended progression:
 
-## Production Deployment Notes
+- Under 500 people: client graph layout with pan, zoom, search, and branch collapse.
+- 500 to 5,000 people: viewport rendering, level-of-detail nodes, branch clustering, and server-side search.
+- 5,000+ people: precomputed layout tiles, progressive graph hydration, and worker-based path calculations.
 
-- Store secrets only in platform environment variables.
-- Keep raw imports in private storage with retention controls.
-- Use Supabase row-level security for every table.
-- Run scans in background workers, not serverless request handlers.
-- Log every material data change to `audit_log`.
-- Use suppression-list triggers to block outreach records for opted-out or inappropriate contacts.
+The prototype demonstrates level-of-detail and branch collapse with a small graph.
+
+## Relationship Engine
+
+`relationship-engine.js` is isolated and covered by `tests/relationship-engine.test.js`.
+
+It currently supports:
+
+- ancestors and descendants
+- siblings and half-siblings
+- cousins, cousin degrees, and removed cousins
+- spouse or partner records
+- sibling-in-law paths
+- ambiguous visible graph fallback
+
+Production should keep this as a pure module with a larger test matrix before allowing relationship terms to drive user-facing claims.
+
+## Mutation Safety
+
+Important changes should be reversible transactions:
+
+- Add revision rows for profile and relationship updates.
+- Add `activity_event` rows for visible history.
+- Use `deleted_at` and `deletion_record` for soft deletion.
+- Keep periodic snapshots for catastrophic recovery.
+- Treat backup recovery separately from version history.
+
+## Access And Claiming
+
+Users can enter through:
+
+- admin email invitation
+- private URL access request
+
+Existing people should claim their profile rather than creating duplicates. Claims should require approval when the risk is non-trivial.
+
+## V1 Build Path
+
+1. Convert the prototype into a Next.js app with typed domain modules.
+2. Implement Supabase auth and membership-scoped data access.
+3. Port the schema and tighten RLS policies with integration tests.
+4. Replace local prototype mutations with server actions/RPCs.
+5. Add media upload pipeline with original preservation and optimized variants.
+6. Expand duplicate detection and relationship test coverage.
+7. Add admin restore tools and backup restore runbooks.

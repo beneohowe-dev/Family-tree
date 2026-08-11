@@ -1,721 +1,540 @@
--- Motion Community OS
--- Supabase/PostgreSQL schema draft for a private relationship intelligence platform.
--- Raw evidence is kept separate from interpreted intelligence. Sensitive research
--- status is separate from outreach eligibility.
+-- Private Collaborative Family Network
+-- PostgreSQL/Supabase-oriented schema draft for a production implementation.
+-- People are graph nodes. Relationships are graph edges. Personal information,
+-- structural relationships, and media are versioned separately.
 
 create extension if not exists pgcrypto;
 create extension if not exists citext;
-create extension if not exists pg_trgm;
-create extension if not exists vector;
 
-create type app_role as enum ('owner', 'admin', 'researcher', 'viewer');
-create type confidence_level as enum ('HIGH', 'MEDIUM', 'LOW');
-create type warmth_level as enum ('HOT', 'WARM', 'KNOWN', 'LIGHT', 'CONNECTED', 'COLD', 'UNKNOWN');
-create type risk_level as enum ('LOW', 'MEDIUM', 'HIGH');
-create type source_access_type as enum ('api', 'feed', 'import', 'manual', 'web_search');
-create type source_status as enum (
-  'READY',
-  'READY_MANUAL_IMPORT',
-  'CONFIG_REQUIRED',
-  'AWAITING_API_ACCESS',
-  'UNAVAILABLE_APPROVED_METHOD_ONLY',
-  'PAUSED'
+create type membership_role as enum ('owner', 'admin', 'member', 'viewer');
+create type membership_status as enum ('active', 'removed', 'left');
+create type relationship_kind as enum (
+  'biological_parent',
+  'adoptive_parent',
+  'step_parent',
+  'foster_parent',
+  'guardian',
+  'spouse',
+  'partner',
+  'former_spouse',
+  'former_partner',
+  'sibling'
 );
-create type sensitive_data_status as enum (
-  'NONE_RECORDED',
-  'EXPLICIT_PUBLIC_EVIDENCE',
-  'REQUIRES_REVIEW',
-  'SUPPRESSED'
+create type visibility_level as enum ('family', 'connections', 'only_me');
+create type request_status as enum ('pending', 'approved', 'declined', 'cancelled');
+create type suggestion_status as enum ('pending', 'accepted', 'edited_accepted', 'dismissed');
+create type entity_kind as enum (
+  'family_space',
+  'person',
+  'relationship',
+  'profile_field',
+  'photo',
+  'invitation',
+  'access_request',
+  'theme_settings'
 );
-create type human_decision as enum (
-  'SHORTLIST',
-  'INTERESTING',
-  'NOT_RELEVANT',
-  'WRONG_ROLE',
-  'HOLD',
-  'APPROACH',
-  'CONTACTED',
-  'ACTIVE_RELATIONSHIP',
-  'PARTNER',
-  'AMBASSADOR',
-  'ADVISER',
-  'DO_NOT_CONTACT'
-);
-create type opportunity_status as enum ('NEW', 'REVIEW_REQUIRED', 'SHORTLISTED', 'HOLD', 'APPROVED', 'DONE');
-create type scan_status as enum ('queued', 'running', 'succeeded', 'failed', 'cancelled');
-create type entity_kind as enum ('person', 'organisation', 'topic', 'campaign', 'event');
 
 create table app_user (
   id uuid primary key references auth.users (id) on delete cascade,
-  email citext not null unique,
   display_name text not null,
+  email citext not null unique,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create table workspace_membership (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references app_user (id) on delete cascade,
-  role app_role not null default 'viewer',
-  status text not null default 'active',
-  created_at timestamptz not null default now(),
-  unique (user_id)
-);
-
-create table organisations (
+create table family_space (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  website text,
-  logo_storage_path text,
-  sector text,
-  organisation_type text not null,
-  country text,
-  region text,
-  description text,
-  purpose text,
-  relationship_to_motion text,
-  potential_motion_contribution text[] not null default '{}',
-  current_partnerships text[] not null default '{}',
-  relevant_campaigns text[] not null default '{}',
-  relevant_funding_activity text[] not null default '{}',
-  notes text,
-  created_by uuid references app_user (id),
+  slug citext not null unique,
+  created_by uuid not null references app_user (id),
   created_at timestamptz not null default now(),
-  updated_by uuid references app_user (id),
   updated_at timestamptz not null default now(),
-  deleted_at timestamptz,
-  search_vector tsvector generated always as (
-    to_tsvector(
-      'simple',
-      coalesce(name, '') || ' ' ||
-      coalesce(sector, '') || ' ' ||
-      coalesce(organisation_type, '') || ' ' ||
-      coalesce(country, '') || ' ' ||
-      coalesce(description, '')
-    )
-  ) stored
+  deleted_at timestamptz
 );
 
-create table people (
+create table theme_settings (
   id uuid primary key default gen_random_uuid(),
-  full_name text not null,
+  family_space_id uuid not null unique references family_space (id),
+  family_name text not null,
+  theme text not null default 'gallery',
+  accent_colour text not null default '#2f6f73',
+  family_mark_storage_path text,
+  typography text not null default 'system',
+  updated_by uuid references app_user (id),
+  updated_at timestamptz not null default now(),
+  check (theme in ('gallery', 'heritage', 'dark', 'colour', 'minimal'))
+);
+
+create table family_membership (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  user_id uuid not null references app_user (id),
+  role membership_role not null default 'member',
+  status membership_status not null default 'active',
+  invited_by uuid references app_user (id),
+  joined_at timestamptz,
+  removed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (family_space_id, user_id)
+);
+
+create table person (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  display_name text not null,
   preferred_name text,
-  profile_image_storage_path text,
-  current_headline text,
-  current_role text,
-  organisation_id uuid references organisations (id),
-  previous_organisations text[] not null default '{}',
-  previous_roles text[] not null default '{}',
-  country text,
-  region text,
-  city text,
-  languages text[] not null default '{}',
-  primary_motion_role text,
-  geographic_usefulness text[] not null default '{}',
-  estimated_strategic_value text check (estimated_strategic_value in ('HIGH', 'MEDIUM', 'LOW')),
-  relationship_warmth warmth_level not null default 'UNKNOWN',
-  approachability text check (approachability in ('HIGH', 'MEDIUM', 'LOW')),
-  current_relevance text check (current_relevance in ('HIGH', 'MEDIUM', 'LOW')),
-  evidence_confidence confidence_level not null default 'LOW',
-  human_decision human_decision not null default 'INTERESTING',
-  recommended_motion_role text,
-  recommended_foundation_role text,
-  suppression_reason text,
-  created_by uuid references app_user (id),
+  birth_date date,
+  birth_year int,
+  death_date date,
+  death_year int,
+  gender text,
+  pronouns text,
+  primary_photo_id uuid,
+  claimed_by uuid references app_user (id),
+  steward_user_id uuid references app_user (id),
+  created_by uuid not null references app_user (id),
   created_at timestamptz not null default now(),
   updated_by uuid references app_user (id),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz,
+  deletion_record_id uuid,
   search_vector tsvector generated always as (
-    to_tsvector(
-      'simple',
-      coalesce(full_name, '') || ' ' ||
-      coalesce(preferred_name, '') || ' ' ||
-      coalesce(current_headline, '') || ' ' ||
-      coalesce(current_role, '') || ' ' ||
-      coalesce(country, '') || ' ' ||
-      coalesce(city, '')
-    )
-  ) stored
+    to_tsvector('simple', coalesce(display_name, '') || ' ' || coalesce(preferred_name, ''))
+  ) stored,
+  check (birth_year is null or birth_year between 1 and 3000),
+  check (death_year is null or death_year between 1 and 3000)
 );
 
-create table role_groups (
+create table person_claim (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  description text,
-  created_at timestamptz not null default now()
-);
-
-create table roles (
-  id uuid primary key default gen_random_uuid(),
-  role_group_id uuid references role_groups (id) on delete set null,
-  name text not null unique,
-  description text,
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now()
-);
-
-create table person_roles (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid not null references people (id) on delete cascade,
-  role_id uuid not null references roles (id) on delete cascade,
-  role_context text not null default 'motion',
-  confidence confidence_level not null default 'MEDIUM',
-  source_evidence_id uuid,
+  family_space_id uuid not null references family_space (id),
+  person_id uuid not null references person (id),
+  requester_user_id uuid not null references app_user (id),
+  status request_status not null default 'pending',
+  verification_note text,
+  resolved_by uuid references app_user (id),
+  resolved_at timestamptz,
   created_at timestamptz not null default now(),
-  unique (person_id, role_id, role_context)
+  unique (person_id, requester_user_id)
 );
 
-create table skills (
+create table relationship (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  created_at timestamptz not null default now()
-);
-
-create table person_skills (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid not null references people (id) on delete cascade,
-  skill_id uuid not null references skills (id) on delete cascade,
-  confidence confidence_level not null default 'MEDIUM',
-  source_evidence_id uuid,
-  unique (person_id, skill_id)
-);
-
-create table privacy_status (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid references people (id) on delete cascade,
-  organisation_id uuid references organisations (id) on delete cascade,
-  sensitive_data_status sensitive_data_status not null default 'NONE_RECORDED',
-  source_type text not null default 'none',
-  explicit_self_disclosure boolean not null default false,
-  evidence_url text,
-  evidence_date date,
-  allowed_for_research boolean not null default true,
-  allowed_for_outreach boolean not null default false,
-  requires_review boolean not null default true,
-  lawful_use_status text not null default 'needs_review',
-  purpose text not null default 'community_research',
-  retention_until date,
-  reviewed_by uuid references app_user (id),
-  reviewed_at timestamptz,
-  notes text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  check ((person_id is not null)::int + (organisation_id is not null)::int = 1)
-);
-
-create table suppression_list (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid references people (id) on delete cascade,
-  organisation_id uuid references organisations (id) on delete cascade,
-  reason text not null,
-  applies_to_outreach boolean not null default true,
-  applies_to_processing boolean not null default false,
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  revoked_by uuid references app_user (id),
-  revoked_at timestamptz,
-  check ((person_id is not null)::int + (organisation_id is not null)::int = 1)
-);
-
-create table social_accounts (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid references people (id) on delete cascade,
-  organisation_id uuid references organisations (id) on delete cascade,
-  platform text not null,
-  account_url text not null,
-  username text,
-  account_type text not null default 'unknown',
-  verified_visible boolean,
-  date_last_checked date,
-  matching_confidence confidence_level not null default 'LOW',
-  match_evidence text not null,
-  requires_review boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (platform, account_url),
-  check ((person_id is not null)::int + (organisation_id is not null)::int = 1)
-);
-
-create table person_contact_methods (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid not null references people (id) on delete cascade,
-  contact_type text not null check (contact_type in ('email', 'mobile', 'website', 'social', 'intro')),
-  label text not null,
-  value text not null,
-  href text not null,
-  is_primary boolean not null default false,
-  source_evidence_id uuid,
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz
-);
-
-create table person_workflow_state (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid not null unique references people (id) on delete cascade,
-  score int not null default 50 check (score between 0 and 100),
-  timing text not null default 'Hold' check (timing in ('Now', 'Soon', 'Build first', 'Hold', 'Do not approach')),
-  warmth text not null default 'Unknown' check (warmth in ('Hot', 'Warm', 'Known', 'Light', 'Cold', 'Unknown')),
-  allocation text not null default 'Unallocated',
-  pinned boolean not null default false,
-  saved boolean not null default true,
-  opening_angle text,
-  benefit_to_them text,
-  benefit_to_motion text,
-  caution text,
-  updated_by uuid references app_user (id),
-  updated_at timestamptz not null default now()
-);
-
-create table relationships (
-  id uuid primary key default gen_random_uuid(),
-  from_kind entity_kind not null,
-  from_id uuid not null,
-  to_kind entity_kind not null,
-  to_id uuid not null,
-  relationship_type text not null,
-  source text not null,
-  confidence confidence_level not null default 'LOW',
-  relationship_date date,
-  last_verified date,
-  notes text,
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz,
-  check (from_id <> to_id)
-);
-
-create table source_adapters (
-  id uuid primary key default gen_random_uuid(),
-  source_name text not null unique,
-  permitted_access_method text not null,
-  access_type source_access_type not null,
-  credentials_required text[] not null default '{}',
-  rate_limits text,
-  allowed_data text[] not null default '{}',
-  prohibited_uses text[] not null default '{}',
-  retention_restrictions text,
-  last_successful_run timestamptz,
-  errors text[] not null default '{}',
-  status source_status not null default 'CONFIG_REQUIRED',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table source_evidence (
-  id uuid primary key default gen_random_uuid(),
-  source_adapter_id uuid references source_adapters (id),
-  source_url text,
-  source_publisher text,
-  source_date date,
-  discovered_date date not null default current_date,
-  last_checked date,
-  extraction_method text not null,
-  confidence confidence_level not null default 'LOW',
-  exact_factual_claim text not null,
-  raw_storage_path text,
-  raw_retention_until date,
-  created_at timestamptz not null default now()
-);
-
-alter table person_roles
-  add constraint person_roles_source_evidence_fk
-  foreign key (source_evidence_id) references source_evidence (id);
-
-alter table person_skills
-  add constraint person_skills_source_evidence_fk
-  foreign key (source_evidence_id) references source_evidence (id);
-
-create table relationship_evidence (
-  id uuid primary key default gen_random_uuid(),
-  relationship_id uuid not null references relationships (id) on delete cascade,
-  source_evidence_id uuid not null references source_evidence (id) on delete cascade,
-  created_at timestamptz not null default now(),
-  unique (relationship_id, source_evidence_id)
-);
-
-create table fit_scores (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid not null references people (id) on delete cascade,
-  mission_relevance int not null check (mission_relevance between 0 and 100),
-  community_credibility int not null check (community_credibility between 0 and 100),
-  commercial_leverage int not null check (commercial_leverage between 0 and 100),
-  foundation_relevance int not null check (foundation_relevance between 0 and 100),
-  motion_brand_relevance int not null check (motion_brand_relevance between 0 and 100),
-  product_relevance int not null check (product_relevance between 0 and 100),
-  public_voice int not null check (public_voice between 0 and 100),
-  network_proximity int not null check (network_proximity between 0 and 100),
-  relationship_warmth_score int not null check (relationship_warmth_score between 0 and 100),
-  approachability int not null check (approachability between 0 and 100),
-  current_opportunity int not null check (current_opportunity between 0 and 100),
-  evidence_confidence_score int not null check (evidence_confidence_score between 0 and 100),
-  risk_sensitivity risk_level not null default 'LOW',
-  recommended_motion_role text,
-  recommended_foundation_role text,
-  generated_by text not null,
-  generated_at timestamptz not null default now(),
-  source_evidence_ids uuid[] not null default '{}'
-);
-
-create table content_items (
-  id uuid primary key default gen_random_uuid(),
-  content_type text not null,
-  headline text not null,
-  publisher text,
-  url text not null,
-  publication_date date,
-  discovered_date date not null default current_date,
-  original_summary text not null,
-  topics text[] not null default '{}',
-  countries text[] not null default '{}',
-  why_it_may_matter text,
-  source_confidence confidence_level not null default 'LOW',
-  embedding vector(1536),
-  created_at timestamptz not null default now(),
-  unique (url)
-);
-
-create table person_content_mentions (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid not null references people (id) on delete cascade,
-  content_item_id uuid not null references content_items (id) on delete cascade,
-  mention_context text,
-  confidence confidence_level not null default 'LOW',
-  requires_review boolean not null default true,
-  unique (person_id, content_item_id)
-);
-
-create table organisation_content_mentions (
-  id uuid primary key default gen_random_uuid(),
-  organisation_id uuid not null references organisations (id) on delete cascade,
-  content_item_id uuid not null references content_items (id) on delete cascade,
-  mention_context text,
-  confidence confidence_level not null default 'LOW',
-  requires_review boolean not null default true,
-  unique (organisation_id, content_item_id)
-);
-
-create table watch_topics (
-  id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  enabled boolean not null default true,
-  tier text not null default 'WATCHLIST_DAILY',
-  queries text[] not null,
-  daily_budget int not null default 20,
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table watchlists (
-  id uuid primary key default gen_random_uuid(),
-  entity_kind entity_kind not null,
-  entity_id uuid not null,
-  reason text,
-  tier text not null default 'WATCHLIST_DAILY',
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  deleted_at timestamptz
-);
-
-create table opportunities (
-  id uuid primary key default gen_random_uuid(),
-  title text not null,
-  opportunity_type text not null,
-  urgency text not null check (urgency in ('HIGH', 'MEDIUM', 'LOW')),
-  status opportunity_status not null default 'NEW',
-  why_it_matters text not null,
-  next_step text,
-  related_people uuid[] not null default '{}',
-  related_organisations uuid[] not null default '{}',
-  source_evidence_ids uuid[] not null default '{}',
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  deleted_at timestamptz
-);
-
-create table funding_opportunities (
-  id uuid primary key default gen_random_uuid(),
-  opportunity_id uuid references opportunities (id) on delete cascade,
-  funder_organisation_id uuid references organisations (id),
-  amount_min numeric,
-  amount_max numeric,
-  currency text,
-  deadline date,
-  eligibility_notes text,
-  created_at timestamptz not null default now()
-);
-
-create table events (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  event_type text,
-  starts_at timestamptz,
-  ends_at timestamptz,
-  country text,
-  city text,
-  url text,
-  notes text,
-  source_evidence_id uuid references source_evidence (id),
-  created_at timestamptz not null default now()
-);
-
-create table campaigns (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  campaign_type text,
-  owner_organisation_id uuid references organisations (id),
-  url text,
+  family_space_id uuid not null references family_space (id),
+  from_person_id uuid not null references person (id),
+  to_person_id uuid not null references person (id),
+  kind relationship_kind not null,
   start_date date,
   end_date date,
-  topics text[] not null default '{}',
+  confidence text not null default 'family_recorded',
   notes text,
-  source_evidence_id uuid references source_evidence (id),
-  created_at timestamptz not null default now()
-);
-
-create table outreach_plans (
-  id uuid primary key default gen_random_uuid(),
-  person_id uuid references people (id) on delete cascade,
-  organisation_id uuid references organisations (id) on delete cascade,
-  why_them text not null,
-  best_relationship_type text,
-  best_route text,
-  warmest_introduction_path text[] not null default '{}',
-  opening_angle text,
-  motion_can_offer text,
-  what_not_to_say text,
-  timing text not null check (timing in ('NOW', 'SOON', 'BUILD_RELATIONSHIP_FIRST', 'HOLD', 'DO_NOT_APPROACH_YET')),
-  requires_human_approval boolean not null default true,
-  approved_by uuid references app_user (id),
-  approved_at timestamptz,
+  created_by uuid not null references app_user (id),
   created_at timestamptz not null default now(),
-  check ((person_id is not null)::int + (organisation_id is not null)::int = 1)
-);
-
-create table outreach_activity (
-  id uuid primary key default gen_random_uuid(),
-  outreach_plan_id uuid references outreach_plans (id) on delete set null,
-  person_id uuid references people (id) on delete cascade,
-  organisation_id uuid references organisations (id) on delete cascade,
-  activity_type text not null,
-  status text not null,
-  notes text,
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
-  check ((person_id is not null)::int + (organisation_id is not null)::int = 1)
-);
-
-create table notes (
-  id uuid primary key default gen_random_uuid(),
-  entity_kind entity_kind not null,
-  entity_id uuid not null,
-  note_text text not null,
-  visibility text not null default 'internal',
-  created_by uuid references app_user (id),
-  created_at timestamptz not null default now(),
+  updated_by uuid references app_user (id),
   updated_at timestamptz not null default now(),
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  deletion_record_id uuid,
+  check (from_person_id <> to_person_id)
 );
 
-create table tags (
+create table relationship_revision (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  color text,
+  relationship_id uuid not null references relationship (id),
+  family_space_id uuid not null references family_space (id),
+  actor_user_id uuid not null references app_user (id),
+  previous_state jsonb,
+  new_state jsonb not null,
+  reason text,
   created_at timestamptz not null default now()
 );
 
-create table entity_tags (
+create table profile_field (
   id uuid primary key default gen_random_uuid(),
-  entity_kind entity_kind not null,
-  entity_id uuid not null,
-  tag_id uuid not null references tags (id) on delete cascade,
+  family_space_id uuid not null references family_space (id),
+  person_id uuid not null references person (id),
+  category text not null,
+  label text not null,
+  value_text text,
+  value_json jsonb not null default '{}'::jsonb,
+  visibility visibility_level not null default 'family',
+  is_sensitive boolean not null default false,
+  owner_user_id uuid references app_user (id),
+  steward_user_id uuid references app_user (id),
+  added_by uuid not null references app_user (id),
   created_at timestamptz not null default now(),
-  unique (entity_kind, entity_id, tag_id)
+  updated_by uuid references app_user (id),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  deletion_record_id uuid,
+  check (value_text is not null or value_json <> '{}'::jsonb)
 );
 
-create table entity_aliases (
+create table profile_field_revision (
   id uuid primary key default gen_random_uuid(),
-  entity_kind entity_kind not null,
-  entity_id uuid not null,
-  alias text not null,
-  source_evidence_id uuid references source_evidence (id),
+  profile_field_id uuid not null references profile_field (id),
+  family_space_id uuid not null references family_space (id),
+  actor_user_id uuid not null references app_user (id),
+  previous_state jsonb,
+  new_state jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+create table edit_suggestion (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  person_id uuid not null references person (id),
+  target_profile_field_id uuid references profile_field (id),
+  proposed_label text,
+  proposed_value_text text,
+  proposed_value_json jsonb not null default '{}'::jsonb,
+  proposed_visibility visibility_level,
+  message text,
+  suggested_by uuid not null references app_user (id),
+  status suggestion_status not null default 'pending',
+  resolved_by uuid references app_user (id),
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table photo (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  original_storage_path text not null,
+  optimized_storage_paths jsonb not null default '{}'::jsonb,
+  caption text,
+  approximate_photo_date date,
+  approximate_year int,
+  visibility visibility_level not null default 'family',
+  uploaded_by uuid not null references app_user (id),
   created_at timestamptz not null default now(),
-  unique (entity_kind, entity_id, alias)
+  updated_by uuid references app_user (id),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  deletion_record_id uuid
 );
 
-create table entity_merge_candidates (
+alter table person
+  add constraint person_primary_photo_fk
+  foreign key (primary_photo_id) references photo (id);
+
+create table photo_person_tag (
   id uuid primary key default gen_random_uuid(),
-  entity_kind entity_kind not null,
-  entity_a_id uuid not null,
-  entity_b_id uuid not null,
-  score int not null check (score between 0 and 100),
-  evidence_categories text[] not null default '{}',
-  recommendation text not null default 'POSSIBLE_DUPLICATE_REVIEW',
-  status text not null default 'pending',
-  reviewed_by uuid references app_user (id),
-  reviewed_at timestamptz,
+  family_space_id uuid not null references family_space (id),
+  photo_id uuid not null references photo (id),
+  person_id uuid not null references person (id),
+  tagged_by uuid not null references app_user (id),
   created_at timestamptz not null default now(),
-  check (entity_a_id <> entity_b_id)
+  deleted_at timestamptz,
+  unique (photo_id, person_id)
 );
 
-create table import_files (
+create table invitation (
   id uuid primary key default gen_random_uuid(),
-  source_adapter_id uuid references source_adapters (id),
-  original_filename text not null,
-  storage_path text not null,
-  content_hash text not null,
-  imported_by uuid references app_user (id),
-  imported_at timestamptz not null default now(),
-  status text not null default 'uploaded',
-  unique (content_hash)
-);
-
-create table import_rows (
-  id uuid primary key default gen_random_uuid(),
-  import_file_id uuid not null references import_files (id) on delete cascade,
-  row_number int not null,
-  raw_row jsonb not null,
-  resolved_entity_kind entity_kind,
-  resolved_entity_id uuid,
-  resolution_status text not null default 'pending',
-  resolution_notes text,
+  family_space_id uuid not null references family_space (id),
+  email citext not null,
+  role membership_role not null default 'member',
+  token_hash text not null,
+  invited_by uuid not null references app_user (id),
+  accepted_by uuid references app_user (id),
+  status request_status not null default 'pending',
+  expires_at timestamptz not null,
   created_at timestamptz not null default now(),
-  unique (import_file_id, row_number)
+  resolved_at timestamptz
 );
 
-create table scan_jobs (
+create table access_request (
   id uuid primary key default gen_random_uuid(),
-  source_adapter_id uuid references source_adapters (id),
-  watch_topic_id uuid references watch_topics (id),
-  status scan_status not null default 'queued',
-  priority int not null default 100,
-  budget_limit int not null default 20,
-  queued_at timestamptz not null default now(),
-  started_at timestamptz,
-  finished_at timestamptz,
-  error_message text
+  family_space_id uuid not null references family_space (id),
+  name text not null,
+  email citext not null,
+  message text,
+  status request_status not null default 'pending',
+  resolved_by uuid references app_user (id),
+  resolved_at timestamptz,
+  created_at timestamptz not null default now()
 );
 
-create table scan_results (
+create table activity_event (
   id uuid primary key default gen_random_uuid(),
-  scan_job_id uuid not null references scan_jobs (id) on delete cascade,
-  source_url text not null,
-  raw_result jsonb not null default '{}'::jsonb,
-  dedupe_key text not null,
-  content_item_id uuid references content_items (id),
-  status text not null default 'new',
-  created_at timestamptz not null default now(),
-  unique (scan_job_id, dedupe_key)
-);
-
-create table change_events (
-  id uuid primary key default gen_random_uuid(),
-  entity_kind entity_kind not null,
-  entity_id uuid not null,
-  change_type text not null,
-  change_summary text not null,
-  source_evidence_id uuid references source_evidence (id),
-  detected_at timestamptz not null default now(),
-  new_since_last_scan boolean not null default true,
-  reviewed_by uuid references app_user (id),
-  reviewed_at timestamptz
-);
-
-create table audit_log (
-  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
   actor_user_id uuid references app_user (id),
-  action text not null,
-  entity_kind entity_kind,
+  entity_kind entity_kind not null,
   entity_id uuid,
+  action text not null,
   previous_state jsonb,
   new_state jsonb,
+  restoration_metadata jsonb,
   created_at timestamptz not null default now()
 );
 
-create index people_search_idx on people using gin (search_vector);
-create index people_name_trgm_idx on people using gin (full_name gin_trgm_ops);
-create index organisations_search_idx on organisations using gin (search_vector);
-create index organisations_name_trgm_idx on organisations using gin (name gin_trgm_ops);
-create index content_items_search_idx on content_items using gin (to_tsvector('simple', headline || ' ' || original_summary));
-create index content_embedding_idx on content_items using ivfflat (embedding vector_cosine_ops) with (lists = 100);
-create index relationships_from_idx on relationships (from_kind, from_id);
-create index relationships_to_idx on relationships (to_kind, to_id);
-create index source_evidence_url_idx on source_evidence (source_url);
-create index scan_jobs_status_idx on scan_jobs (status, priority, queued_at);
-create index suppression_person_idx on suppression_list (person_id) where revoked_at is null;
+create table deletion_record (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  entity_kind entity_kind not null,
+  entity_id uuid not null,
+  entity_name text not null,
+  deleted_by uuid not null references app_user (id),
+  deleted_at timestamptz not null default now(),
+  previous_state jsonb not null,
+  restored_by uuid references app_user (id),
+  restored_at timestamptz,
+  legal_hold boolean not null default false
+);
 
-alter table app_user enable row level security;
-alter table workspace_membership enable row level security;
-alter table people enable row level security;
-alter table organisations enable row level security;
-alter table privacy_status enable row level security;
-alter table suppression_list enable row level security;
-alter table social_accounts enable row level security;
-alter table relationships enable row level security;
-alter table source_evidence enable row level security;
-alter table content_items enable row level security;
-alter table opportunities enable row level security;
-alter table outreach_plans enable row level security;
-alter table audit_log enable row level security;
+alter table person
+  add constraint person_deletion_record_fk
+  foreign key (deletion_record_id) references deletion_record (id);
 
-create policy "members can read people"
-  on people for select
-  using (exists (
-    select 1 from workspace_membership wm
-    where wm.user_id = auth.uid()
-    and wm.status = 'active'
-  ));
+alter table relationship
+  add constraint relationship_deletion_record_fk
+  foreign key (deletion_record_id) references deletion_record (id);
 
-create policy "admins can write people"
-  on people for all
-  using (exists (
-    select 1 from workspace_membership wm
-    where wm.user_id = auth.uid()
-    and wm.status = 'active'
-    and wm.role in ('owner', 'admin', 'researcher')
-  ))
-  with check (exists (
-    select 1 from workspace_membership wm
-    where wm.user_id = auth.uid()
-    and wm.status = 'active'
-    and wm.role in ('owner', 'admin', 'researcher')
-  ));
+alter table profile_field
+  add constraint profile_field_deletion_record_fk
+  foreign key (deletion_record_id) references deletion_record (id);
 
--- Apply equivalent read/write policies to other tables in the Supabase migration
--- set. They are kept explicit per table in production so privacy and outreach
--- tables can be made stricter than general research records.
+alter table photo
+  add constraint photo_deletion_record_fk
+  foreign key (deletion_record_id) references deletion_record (id);
 
-create or replace function block_suppressed_outreach()
-returns trigger
-language plpgsql
+create table snapshot (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  snapshot_kind text not null default 'scheduled',
+  storage_path text not null,
+  checksum text not null,
+  covered_until timestamptz not null,
+  created_by uuid references app_user (id),
+  created_at timestamptz not null default now(),
+  restore_tested_at timestamptz
+);
+
+create table permission_exception (
+  id uuid primary key default gen_random_uuid(),
+  family_space_id uuid not null references family_space (id),
+  entity_kind entity_kind not null,
+  entity_id uuid not null,
+  user_id uuid not null references app_user (id),
+  permission text not null,
+  granted_by uuid not null references app_user (id),
+  created_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+
+create index family_membership_space_user_idx
+  on family_membership (family_space_id, user_id)
+  where status = 'active';
+
+create index person_space_search_idx
+  on person using gin (search_vector)
+  where deleted_at is null;
+
+create index relationship_space_from_idx
+  on relationship (family_space_id, from_person_id)
+  where deleted_at is null;
+
+create index relationship_space_to_idx
+  on relationship (family_space_id, to_person_id)
+  where deleted_at is null;
+
+create index profile_field_person_idx
+  on profile_field (family_space_id, person_id)
+  where deleted_at is null;
+
+create index profile_field_aggregate_idx
+  on profile_field (family_space_id, label, visibility)
+  where deleted_at is null and is_sensitive = false;
+
+create index activity_event_space_time_idx
+  on activity_event (family_space_id, created_at desc);
+
+create index photo_tag_person_idx
+  on photo_person_tag (family_space_id, person_id)
+  where deleted_at is null;
+
+create or replace function is_family_member(space_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
 as $$
-begin
-  if exists (
+  select exists (
     select 1
-    from suppression_list s
-    where s.revoked_at is null
-      and s.applies_to_outreach
-      and (
-        (new.person_id is not null and s.person_id = new.person_id)
-        or (new.organisation_id is not null and s.organisation_id = new.organisation_id)
-      )
-  ) then
-    raise exception 'Outreach is blocked by suppression list';
-  end if;
-
-  return new;
-end;
+    from family_membership
+    where family_space_id = space_id
+      and user_id = auth.uid()
+      and status = 'active'
+  );
 $$;
 
-create trigger trg_block_suppressed_outreach_plan
-before insert or update on outreach_plans
-for each row execute function block_suppressed_outreach();
+create or replace function membership_role_for(space_id uuid)
+returns membership_role
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select role
+  from family_membership
+  where family_space_id = space_id
+    and user_id = auth.uid()
+    and status = 'active'
+  limit 1;
+$$;
 
-create trigger trg_block_suppressed_outreach_activity
-before insert or update on outreach_activity
-for each row execute function block_suppressed_outreach();
+create or replace function is_space_admin(space_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select membership_role_for(space_id) in ('owner', 'admin');
+$$;
+
+create or replace function owns_claimed_person(target_person_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from person
+    where id = target_person_id
+      and claimed_by = auth.uid()
+      and deleted_at is null
+  );
+$$;
+
+alter table family_space enable row level security;
+alter table theme_settings enable row level security;
+alter table family_membership enable row level security;
+alter table person enable row level security;
+alter table person_claim enable row level security;
+alter table relationship enable row level security;
+alter table relationship_revision enable row level security;
+alter table profile_field enable row level security;
+alter table profile_field_revision enable row level security;
+alter table edit_suggestion enable row level security;
+alter table photo enable row level security;
+alter table photo_person_tag enable row level security;
+alter table invitation enable row level security;
+alter table access_request enable row level security;
+alter table activity_event enable row level security;
+alter table deletion_record enable row level security;
+alter table snapshot enable row level security;
+alter table permission_exception enable row level security;
+
+create policy "members can read their family spaces"
+  on family_space for select
+  using (is_family_member(id));
+
+create policy "admins can update family spaces"
+  on family_space for update
+  using (is_space_admin(id))
+  with check (is_space_admin(id));
+
+create policy "members can read active people"
+  on person for select
+  using (deleted_at is null and is_family_member(family_space_id));
+
+create policy "members can add people"
+  on person for insert
+  with check (is_family_member(family_space_id));
+
+create policy "person owners and admins can update person shells"
+  on person for update
+  using (is_space_admin(family_space_id) or owns_claimed_person(id) or steward_user_id = auth.uid())
+  with check (is_space_admin(family_space_id) or owns_claimed_person(id) or steward_user_id = auth.uid());
+
+create policy "members can read active relationships"
+  on relationship for select
+  using (deleted_at is null and is_family_member(family_space_id));
+
+create policy "admins can write structural relationships"
+  on relationship for all
+  using (is_space_admin(family_space_id))
+  with check (is_space_admin(family_space_id));
+
+create policy "members can propose structural additions"
+  on relationship for insert
+  with check (is_family_member(family_space_id));
+
+create policy "profile fields follow visibility"
+  on profile_field for select
+  using (
+    deleted_at is null
+    and is_family_member(family_space_id)
+    and (
+      visibility = 'family'
+      or owner_user_id = auth.uid()
+      or steward_user_id = auth.uid()
+      or is_space_admin(family_space_id)
+    )
+  );
+
+create policy "owners and stewards can update fields"
+  on profile_field for update
+  using (
+    owner_user_id = auth.uid()
+    or steward_user_id = auth.uid()
+    or is_space_admin(family_space_id)
+  )
+  with check (
+    owner_user_id = auth.uid()
+    or steward_user_id = auth.uid()
+    or is_space_admin(family_space_id)
+  );
+
+create policy "members can add non-owned field suggestions"
+  on edit_suggestion for insert
+  with check (is_family_member(family_space_id) and suggested_by = auth.uid());
+
+create policy "members can read relevant suggestions"
+  on edit_suggestion for select
+  using (
+    is_space_admin(family_space_id)
+    or suggested_by = auth.uid()
+    or owns_claimed_person(person_id)
+  );
+
+create policy "members can read permitted photos"
+  on photo for select
+  using (
+    deleted_at is null
+    and is_family_member(family_space_id)
+    and (visibility = 'family' or uploaded_by = auth.uid())
+  );
+
+create policy "admins can read access requests"
+  on access_request for select
+  using (is_space_admin(family_space_id));
+
+create policy "anyone can create access requests"
+  on access_request for insert
+  with check (status = 'pending');
+
+create policy "members can read activity"
+  on activity_event for select
+  using (is_family_member(family_space_id));
+
+create policy "admins can read deletion records and snapshots"
+  on deletion_record for select
+  using (is_space_admin(family_space_id));
+
+create policy "admins can read snapshots"
+  on snapshot for select
+  using (is_space_admin(family_space_id));
+
+-- Production mutation flow:
+-- 1. Write operations should run through server actions or RPCs, not direct
+--    broad client updates.
+-- 2. Every mutation inserts activity_event and the matching revision row inside
+--    the same transaction.
+-- 3. Deletes set deleted_at and create deletion_record. Permanent deletion is
+--    reserved for protected privacy/legal flows.
+-- 4. Relationship updates are recoverable through relationship_revision plus
+--    scheduled snapshot rows and off-database media backups.

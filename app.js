@@ -3,7 +3,7 @@
 
   var CURRENT_USER_ID = "you";
   var CURRENT_USER_NAME = "You";
-  var STORAGE_KEY = "private-family-network-prototype-v10";
+  var STORAGE_KEY = "private-family-network-prototype-v12";
 
   var people = [
     {
@@ -12,8 +12,11 @@
       firstName: "Parent",
       middleNames: "",
       lastName: "",
+      birthDate: "",
       birthYear: null,
+      birthPlace: "",
       deathYear: null,
+      photoData: "",
       gender: "male",
       claimedBy: null,
       stewardId: CURRENT_USER_ID,
@@ -29,8 +32,11 @@
       firstName: "Parent",
       middleNames: "",
       lastName: "",
+      birthDate: "",
       birthYear: null,
+      birthPlace: "",
       deathYear: null,
+      photoData: "",
       gender: "female",
       claimedBy: null,
       stewardId: CURRENT_USER_ID,
@@ -46,8 +52,11 @@
       firstName: "You",
       middleNames: "",
       lastName: "",
+      birthDate: "",
       birthYear: null,
+      birthPlace: "",
       deathYear: null,
+      photoData: "",
       gender: "unknown",
       claimedBy: "you",
       x: 550,
@@ -62,8 +71,11 @@
       firstName: "Sibling",
       middleNames: "",
       lastName: "",
+      birthDate: "",
       birthYear: null,
+      birthPlace: "",
       deathYear: null,
+      photoData: "",
       gender: "unknown",
       claimedBy: null,
       stewardId: CURRENT_USER_ID,
@@ -124,6 +136,7 @@
 
   var lastUndo = null;
   var toastTimer = null;
+  var photoDraft = emptyPhotoDraft();
   var TREE_NODE_HALF = 92;
 
   var els = {
@@ -147,6 +160,13 @@
     addInfoDialog: document.getElementById("addInfoDialog"),
     addInfoForm: document.getElementById("addInfoForm"),
     promptGrid: document.getElementById("promptGrid"),
+    profilePhotoInput: document.getElementById("profilePhotoInput"),
+    photoCropper: document.getElementById("photoCropper"),
+    photoPreviewCanvas: document.getElementById("photoPreviewCanvas"),
+    photoZoom: document.getElementById("photoZoom"),
+    photoX: document.getElementById("photoX"),
+    photoY: document.getElementById("photoY"),
+    photoRemoveButton: document.getElementById("photoRemoveButton"),
     suggestDialog: document.getElementById("suggestDialog"),
     suggestForm: document.getElementById("suggestForm"),
     suggestCurrent: document.getElementById("suggestCurrent"),
@@ -160,6 +180,9 @@
     toastMessage: document.getElementById("toastMessage"),
     tooltipBubble: document.getElementById("tooltipBubble"),
     undoButton: document.getElementById("undoButton"),
+    saveButton: document.getElementById("saveButton"),
+    shareButton: document.getElementById("shareButton"),
+    saveStatus: document.getElementById("saveStatus"),
     themeSelect: document.getElementById("themeSelect"),
     demoCoach: document.getElementById("demoCoach"),
     demoStepCount: document.getElementById("demoStepCount"),
@@ -221,6 +244,16 @@
       text: "A name, date, place, photo or story is enough. Nobody has to complete a profile.",
       prepare: function prepareAdd() {
         selectPerson(CURRENT_USER_ID, true);
+      }
+    },
+    {
+      selector: "#shareButton",
+      title: "Share with family",
+      text: "Share link copies this profile view so a relative can request access and help fill in memories.",
+      prepare: function prepareShare() {
+        closeFloatingSurfaces();
+        els.privateGate.hidden = true;
+        els.approvedApp.hidden = false;
       }
     },
     {
@@ -354,6 +387,19 @@
     return person && !person.deathYear;
   }
 
+  function emptyPhotoDraft() {
+    return {
+      dataUrl: "",
+      image: null,
+      changed: false,
+      remove: false,
+      zoom: 1,
+      x: 0,
+      y: 0,
+      croppedDataUrl: ""
+    };
+  }
+
   function escapeHTML(value) {
     return String(value)
       .replace(/&/g, "&amp;")
@@ -361,6 +407,30 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  function safePhotoDataUrl(value) {
+    var text = String(value || "");
+    return /^data:image\/(png|jpe?g|webp);base64,/i.test(text) ? text : "";
+  }
+
+  function personPhotoData(person) {
+    return safePhotoDataUrl(person && person.photoData);
+  }
+
+  function hasPersonPhoto(person) {
+    return Boolean(personPhotoData(person) || (person && !person.placeholder && person.photo != null));
+  }
+
+  function profilePhotoMarkup(person) {
+    var dataUrl = personPhotoData(person);
+    if (dataUrl) {
+      return "<div class=\"profile-photo\" style=\"background-image:url('" + escapeHTML(dataUrl) + "');background-position:center;background-size:cover\"></div>";
+    }
+    if (person.placeholder || person.photo == null) {
+      return "<div class=\"profile-photo ghost-profile\" aria-hidden=\"true\"></div>";
+    }
+    return "<div class=\"profile-photo\" style=\"background-position:" + photoPosition(person) + "\"></div>";
   }
 
   function photoPosition(person) {
@@ -374,6 +444,10 @@
   function portraitMarkup(person, sizeClass) {
     var classes = ["portrait"];
     if (sizeClass) classes.push(sizeClass);
+    var dataUrl = personPhotoData(person);
+    if (dataUrl) {
+      return "<span class=\"" + classes.join(" ") + "\" aria-hidden=\"true\" style=\"background-image:url('" + escapeHTML(dataUrl) + "');background-position:center;background-size:cover\"></span>";
+    }
     if (person.placeholder || person.photo == null) {
       classes.push("ghost");
       return "<span class=\"" + classes.join(" ") + "\" aria-hidden=\"true\"></span>";
@@ -381,10 +455,68 @@
     return "<span class=\"" + classes.join(" ") + "\" aria-hidden=\"true\" style=\"background-position:" + photoPosition(person) + "\"></span>";
   }
 
+  function normalizeDateInput(value) {
+    var text = String(value || "").trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+  }
+
+  function yearFromDate(value) {
+    var date = normalizeDateInput(value);
+    return date ? Number(date.slice(0, 4)) : null;
+  }
+
+  function birthYearValue(person) {
+    return person ? (person.birthYear || yearFromDate(person.birthDate)) : null;
+  }
+
+  function birthSortValue(person) {
+    if (!person) return Number.POSITIVE_INFINITY;
+    var birthDate = normalizeDateInput(person.birthDate);
+    if (birthDate) return Number(birthDate.replace(/-/g, ""));
+    var year = birthYearValue(person);
+    return year ? year * 10000 : Number.POSITIVE_INFINITY;
+  }
+
+  function knownBirth(person) {
+    return Number.isFinite(birthSortValue(person));
+  }
+
+  function sortOldestFirst(items) {
+    return items.slice().sort(function compareBirthOrder(a, b) {
+      var birthA = birthSortValue(a);
+      var birthB = birthSortValue(b);
+      if (birthA !== birthB) return birthA - birthB;
+      if (knownBirth(a) !== knownBirth(b)) return knownBirth(a) ? -1 : 1;
+      var xA = Number.isFinite(a && a.x) ? a.x : 0;
+      var xB = Number.isFinite(b && b.x) ? b.x : 0;
+      if (xA !== xB) return xA - xB;
+      return primaryName(a).localeCompare(primaryName(b));
+    });
+  }
+
+  function formatBirthDate(value) {
+    var date = normalizeDateInput(value);
+    if (!date) return "";
+    var parts = date.split("-").map(Number);
+    return new Intl.DateTimeFormat([], {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    }).format(new Date(parts[0], parts[1] - 1, parts[2]));
+  }
+
+  function birthSummary(person) {
+    if (!person) return "";
+    if (person.birthDate) return formatBirthDate(person.birthDate);
+    var year = birthYearValue(person);
+    return year ? "c. " + year : "";
+  }
+
   function years(person) {
-    if (!person.birthYear && !person.deathYear) return "";
-    if (person.birthYear && person.deathYear) return person.birthYear + "-" + person.deathYear;
-    if (person.birthYear) return "b. " + person.birthYear;
+    var birthYear = birthYearValue(person);
+    if (!birthYear && !person.deathYear) return "";
+    if (birthYear && person.deathYear) return birthYear + "-" + person.deathYear;
+    if (birthYear) return "b. " + birthYear;
     return "d. " + person.deathYear;
   }
 
@@ -460,11 +592,13 @@
     mutate();
     persist();
     renderAll();
-    showToast(message || "Saved");
+    showToast(message || "Saved", true);
   }
 
-  function showToast(message) {
-    els.toastMessage.textContent = message + " · Undo";
+  function showToast(message, canUndo) {
+    var hasUndo = canUndo !== false && Boolean(lastUndo);
+    els.toastMessage.textContent = hasUndo ? message + " · Undo" : message;
+    els.undoButton.hidden = !hasUndo;
     els.toast.hidden = false;
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(function hideLater() {
@@ -491,9 +625,16 @@
           accent: state.accent
         }
       }));
+      updateSaveStatus("Saved on this device");
     } catch (error) {
       console.warn("Unable to save local prototype state.", error);
+      updateSaveStatus("Could not save");
     }
+  }
+
+  function updateSaveStatus(message) {
+    if (!els.saveStatus) return;
+    els.saveStatus.textContent = message;
   }
 
   function loadSavedState() {
@@ -558,6 +699,7 @@
   }
 
   function renderMap() {
+    applyAgeAwareLayout();
     var peopleToRender = visiblePeople();
     var visibleIds = new Set(peopleToRender.map(function toId(person) { return person.id; }));
     var pathPairs = pathPairSet(state.highlightPath);
@@ -581,13 +723,101 @@
         " style=\"left:" + person.x + "px;top:" + person.y + "px\">",
         portraitMarkup(person),
         "<span class=\"node-name\">" + escapeHTML(primaryName(person)) + "</span>",
-        "<span class=\"node-years\">" + escapeHTML(person.roleHint || years(person) || "Tap to fill in") + "</span>",
+        "<span class=\"node-years\">" + escapeHTML(years(person) || person.roleHint || "Tap to fill in") + "</span>",
         person.partnerPrompt ? "<span class=\"node-suggestion\">" + escapeHTML(person.partnerPrompt) + "</span>" : "",
         person.id === CURRENT_USER_ID ? "<span class=\"node-tag\">You</span>" : "",
         "</button>"
       ].join("");
     }).join("");
 
+  }
+
+  function applyAgeAwareLayout() {
+    var currentGraph = graph();
+    var handledChildren = new Set();
+    var childGroups = new Map();
+
+    activeRelationships().filter(function parentRelationship(relationshipItem) {
+      return relationshipItem.type.indexOf("parent") !== -1 || relationshipItem.type === "guardian";
+    }).forEach(function groupByParents(relationshipItem) {
+      var child = byId(relationshipItem.to);
+      if (!child || child.status === "deleted") return;
+      var parentIds = (currentGraph.parentsByChild.get(child.id) || [])
+        .map(function toId(parentRef) { return parentRef.id; })
+        .filter(function exists(parentId) { return Boolean(byId(parentId)); })
+        .sort();
+      if (!parentIds.length) return;
+      var key = parentIds.join(":");
+      if (!childGroups.has(key)) {
+        childGroups.set(key, { parentIds: parentIds, children: [] });
+      }
+      var group = childGroups.get(key);
+      if (!group.children.some(function already(existing) { return existing.id === child.id; })) {
+        group.children.push(child);
+      }
+    });
+
+    childGroups.forEach(function layoutFamilyGroup(group) {
+      var children = sortOldestFirst(group.children);
+      if (!children.length) return;
+      var parents = sortOldestFirst(group.parentIds.map(byId).filter(Boolean));
+      var childRowY = average(children.map(function yOf(child) { return child.y; })) || 530;
+      var parentRowY = parents.length ? average(parents.map(function yOf(parentPerson) { return parentPerson.y; })) || childRowY - 300 : childRowY - 300;
+      var centerX = average(children.concat(parents).map(function xOf(person) { return person.x; })) || 620;
+      layoutRow(children, centerX, childRowY, 200);
+      layoutRow(parents, centerX, parentRowY, 200);
+      children.forEach(function mark(child) { handledChildren.add(child.id); });
+    });
+
+    var ungroupedChildrenByParent = new Map();
+    activeRelationships().filter(function parentRelationship(relationshipItem) {
+      return relationshipItem.type.indexOf("parent") !== -1 || relationshipItem.type === "guardian";
+    }).forEach(function collectSingleParent(relationshipItem) {
+      var child = byId(relationshipItem.to);
+      if (!child || child.status === "deleted" || handledChildren.has(child.id)) return;
+      if (!ungroupedChildrenByParent.has(relationshipItem.from)) {
+        ungroupedChildrenByParent.set(relationshipItem.from, []);
+      }
+      ungroupedChildrenByParent.get(relationshipItem.from).push(child);
+    });
+
+    ungroupedChildrenByParent.forEach(function layoutSingleParentChildren(children, parentId) {
+      var parentPerson = byId(parentId);
+      if (!parentPerson) return;
+      var sortedChildren = sortOldestFirst(children);
+      layoutRow(sortedChildren, parentPerson.x, average(sortedChildren.map(function yOf(child) { return child.y; })) || parentPerson.y + 300, 200);
+    });
+
+    activeRelationships().filter(function partnerRelationship(relationshipItem) {
+      return relationshipItem.type.indexOf("partner") !== -1 || relationshipItem.type.indexOf("spouse") !== -1;
+    }).forEach(function layoutPartnerPair(relationshipItem) {
+      var a = byId(relationshipItem.from);
+      var b = byId(relationshipItem.to);
+      if (!a || !b || a.status === "deleted" || b.status === "deleted") return;
+      var pair = sortOldestFirst([a, b]);
+      var centerX = average([a.x, b.x]);
+      var centerY = average([a.y, b.y]);
+      layoutRow(pair, centerX, centerY, 200);
+    });
+  }
+
+  function layoutRow(items, centerX, y, gap) {
+    if (!items.length) return;
+    var startX = centerX - ((items.length - 1) * gap) / 2;
+    items.forEach(function place(person, index) {
+      person.x = Math.round(startX + index * gap);
+      person.y = Math.round(y);
+    });
+  }
+
+  function average(values) {
+    var numbers = values.filter(function valid(value) {
+      return Number.isFinite(value);
+    });
+    if (!numbers.length) return 0;
+    return numbers.reduce(function sum(total, value) {
+      return total + value;
+    }, 0) / numbers.length;
   }
 
   function renderTreeLines(visibleIds, pathPairs) {
@@ -680,10 +910,8 @@
     });
 
     els.profilePanel.innerHTML = [
-      "<div class=\"profile-hero " + genderClass(person) + (person.placeholder || person.photo == null ? " missing" : "") + "\">",
-      person.placeholder || person.photo == null
-        ? "<div class=\"profile-photo ghost-profile\" aria-hidden=\"true\"></div>"
-        : "<div class=\"profile-photo\" style=\"background-position:" + photoPosition(person) + "\"></div>",
+      "<div class=\"profile-hero " + genderClass(person) + (hasPersonPhoto(person) ? "" : " missing") + "\">",
+      profilePhotoMarkup(person),
       "<div class=\"profile-title\">",
       "<p>" + escapeHTML(person.roleHint || years(person) || relation.label) + "</p>",
       "<h2>" + escapeHTML(primaryName(person)) + "</h2>",
@@ -701,11 +929,50 @@
       person.id !== CURRENT_USER_ID ? "<button class=\"button\" type=\"button\" data-soft-delete data-tooltip=\"Soft remove this profile so an admin can restore it later.\">Remove profile</button>" : "",
       "</div>",
       namesSection(person),
+      birthSection(person),
       familySection(person),
       fieldsSection(person),
       memoriesSection(person),
       "</div>"
     ].join("");
+    bindProfileActionButtons();
+  }
+
+  function bindProfileActionButtons() {
+    var addInfoButton = els.profilePanel.querySelector("[data-open-add-info]");
+    if (addInfoButton) {
+      addInfoButton.addEventListener("click", function openInfo(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openAddInfoDialog();
+      });
+    }
+
+    els.profilePanel.querySelectorAll("[data-open-relative]").forEach(function bindRelative(button) {
+      button.addEventListener("click", function openRelative(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        openRelativeDialog(button.dataset.defaultConnection);
+      });
+    });
+
+    var claimButton = els.profilePanel.querySelector("[data-claim-profile]");
+    if (claimButton) {
+      claimButton.addEventListener("click", function claimProfile(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        requestProfileClaim();
+      });
+    }
+
+    var deleteButton = els.profilePanel.querySelector("[data-soft-delete]");
+    if (deleteButton) {
+      deleteButton.addEventListener("click", function deleteProfile(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        softDeleteSelectedPerson();
+      });
+    }
   }
 
   function profileNotice(person) {
@@ -771,6 +1038,35 @@
     ].join("");
   }
 
+  function birthSection(person) {
+    var born = birthSummary(person);
+    var place = String(person.birthPlace || "").trim();
+    if (!born && !place) return "";
+    return [
+      "<section class=\"section-block birth-section\">",
+      "<h3>Birth</h3>",
+      "<div class=\"field-list\">",
+      born ? [
+        "<article class=\"field-row birth-field-row\">",
+        "<div>",
+        "<strong>" + (person.birthDate ? "Date of birth" : "Birth year") + "</strong>",
+        "<p>" + escapeHTML(born) + "</p>",
+        "</div>",
+        "</article>"
+      ].join("") : "",
+      place ? [
+        "<article class=\"field-row birth-field-row\">",
+        "<div>",
+        "<strong>Place of birth</strong>",
+        "<p>" + escapeHTML(place) + "</p>",
+        "</div>",
+        "</article>"
+      ].join("") : "",
+      "</div>",
+      "</section>"
+    ].join("");
+  }
+
   function fieldsSection(person) {
     var grouped = {};
     profileFields.filter(function keep(fieldItem) {
@@ -823,18 +1119,18 @@
 
   function familySection(person) {
     var currentGraph = graph();
-    var parents = (currentGraph.parentsByChild.get(person.id) || []).map(function toPerson(item) {
+    var parents = sortOldestFirst((currentGraph.parentsByChild.get(person.id) || []).map(function toPerson(item) {
       return byId(item.id);
-    }).filter(Boolean);
-    var partners = (currentGraph.partnersByPerson.get(person.id) || []).map(function toPerson(item) {
+    }).filter(Boolean));
+    var partners = sortOldestFirst((currentGraph.partnersByPerson.get(person.id) || []).map(function toPerson(item) {
       return byId(item.id);
-    }).filter(Boolean);
-    var children = (currentGraph.childrenByParent.get(person.id) || []).map(function toPerson(item) {
+    }).filter(Boolean));
+    var children = sortOldestFirst((currentGraph.childrenByParent.get(person.id) || []).map(function toPerson(item) {
       return byId(item.id);
-    }).filter(Boolean);
-    var siblings = people.filter(function findSibling(candidate) {
+    }).filter(Boolean));
+    var siblings = sortOldestFirst(people.filter(function findSibling(candidate) {
       return candidate.id !== person.id && candidate.status !== "deleted" && siblingInfo(person.id, candidate.id, currentGraph);
-    });
+    }));
     var groups = [
       ["Parents", parents],
       ["Partners", partners],
@@ -878,7 +1174,7 @@
   }
 
   function memoriesSection(person) {
-    if (person.placeholder || person.photo == null) {
+    if (!hasPersonPhoto(person)) {
       return [
         "<section class=\"section-block\">",
         "<h3>Photo</h3>",
@@ -891,10 +1187,11 @@
       "Tagged family photo",
       "Shared memory"
     ];
+    var imageSrc = personPhotoData(person) || "assets/family-gallery.png";
     var items = captions.slice(0, person.id === CURRENT_USER_ID ? 3 : 2).map(function render(caption, index) {
       return [
         "<article class=\"memory-card\">",
-        "<img src=\"assets/family-gallery.png\" alt=\"" + escapeHTML(caption + " for " + primaryName(person)) + "\">",
+        "<img src=\"" + escapeHTML(imageSrc) + "\" alt=\"" + escapeHTML(caption + " for " + primaryName(person)) + "\">",
         "<p>" + escapeHTML(caption) + "</p>",
         "</article>"
       ].join("");
@@ -935,8 +1232,9 @@
     els.exploreContent.innerHTML = [
       "<div class=\"start-steps\">",
       "<div><strong>1</strong><span>Tap You and add your real name.</span></div>",
-      "<div><strong>2</strong><span>Tap each Parent and fill in what you know.</span></div>",
-      "<div><strong>3</strong><span>Add husband, wife, partner, siblings or older relatives one at a time.</span></div>",
+      "<div><strong>2</strong><span>Add birth date, birthplace or a photo if you know it.</span></div>",
+      "<div><strong>3</strong><span>Tap each Parent, then add partners, siblings and older relatives one at a time.</span></div>",
+      "<div><strong>4</strong><span>Save, then share a link with someone who knows more.</span></div>",
       "</div>",
       "<div class=\"notice-box\"><strong>Built for family memory</strong><span>Older relatives can add names, dates, stories and photos without needing to understand a database.</span></div>"
     ].join("");
@@ -1041,6 +1339,8 @@
     var results = people.filter(function match(person) {
       if (person.status === "deleted") return false;
       if (fullName(person).toLowerCase().includes(value) || primaryName(person).toLowerCase().includes(value)) return true;
+      if (String(person.birthPlace || "").toLowerCase().includes(value)) return true;
+      if (birthSummary(person).toLowerCase().includes(value) || years(person).toLowerCase().includes(value)) return true;
       return profileFields.some(function matchField(fieldItem) {
         return fieldItem.personId === person.id &&
           canSearchField(fieldItem) &&
@@ -1067,6 +1367,8 @@
         fieldItem.value.toLowerCase().includes(query);
     });
     if (match) return match.label + ": " + match.value;
+    if (String(person.birthPlace || "").toLowerCase().includes(query)) return "Born in " + person.birthPlace;
+    if (birthSummary(person).toLowerCase().includes(query) || years(person).toLowerCase().includes(query)) return "Born " + birthSummary(person);
     if (String(person.middleNames || "").trim()) return "Middle names: " + person.middleNames;
     return years(person) || "Family member";
   }
@@ -1142,6 +1444,128 @@
     renderMap();
   }
 
+  function resetPhotoDraft(person) {
+    photoDraft = emptyPhotoDraft();
+    photoDraft.dataUrl = personPhotoData(person);
+    photoDraft.remove = false;
+    if (els.profilePhotoInput) els.profilePhotoInput.value = "";
+    if (photoDraft.dataUrl) {
+      loadPhotoDraftImage(photoDraft.dataUrl).catch(function failPhotoPreview(error) {
+        console.warn("Unable to preview saved photo.", error);
+        photoDraft = emptyPhotoDraft();
+        renderPhotoDraftPreview();
+      });
+    } else {
+      renderPhotoDraftPreview();
+    }
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise(function read(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function loaded() {
+        resolve(String(reader.result || ""));
+      };
+      reader.onerror = function failed() {
+        reject(reader.error);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImage(dataUrl) {
+    return new Promise(function load(resolve, reject) {
+      var image = new Image();
+      image.onload = function loaded() {
+        resolve(image);
+      };
+      image.onerror = reject;
+      image.src = dataUrl;
+    });
+  }
+
+  async function loadPhotoDraftImage(dataUrl) {
+    photoDraft.image = await loadImage(dataUrl);
+    renderPhotoDraftPreview();
+  }
+
+  async function handlePhotoFileChange(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    if (!file.type || file.type.indexOf("image/") !== 0) {
+      window.alert("Please choose an image file.");
+      return;
+    }
+    try {
+      photoDraft = emptyPhotoDraft();
+      photoDraft.dataUrl = await readFileAsDataUrl(file);
+      photoDraft.changed = true;
+      await loadPhotoDraftImage(photoDraft.dataUrl);
+    } catch (error) {
+      console.warn("Unable to read photo.", error);
+      window.alert("This photo could not be opened.");
+    }
+  }
+
+  function updatePhotoDraftFromControls() {
+    photoDraft.zoom = Number(els.photoZoom.value) || 1;
+    photoDraft.x = Number(els.photoX.value) || 0;
+    photoDraft.y = Number(els.photoY.value) || 0;
+    photoDraft.changed = Boolean(photoDraft.dataUrl);
+    renderPhotoDraftPreview();
+  }
+
+  function removePhotoDraft() {
+    photoDraft = emptyPhotoDraft();
+    photoDraft.changed = true;
+    photoDraft.remove = true;
+    if (els.profilePhotoInput) els.profilePhotoInput.value = "";
+    renderPhotoDraftPreview();
+  }
+
+  function renderPhotoDraftPreview() {
+    if (!els.photoCropper || !els.photoPreviewCanvas) return;
+    var hasDraftPhoto = Boolean(photoDraft.dataUrl && photoDraft.image);
+    els.photoCropper.hidden = !hasDraftPhoto;
+    if (els.photoZoom) els.photoZoom.value = String(photoDraft.zoom);
+    if (els.photoX) els.photoX.value = String(photoDraft.x);
+    if (els.photoY) els.photoY.value = String(photoDraft.y);
+    if (!hasDraftPhoto) return;
+    drawPhotoCrop(els.photoPreviewCanvas, photoDraft.image);
+  }
+
+  function drawPhotoCrop(canvas, image) {
+    var size = canvas.width || 640;
+    var context = canvas.getContext("2d");
+    var zoom = Math.max(1, Math.min(2.6, Number(photoDraft.zoom) || 1));
+    var scale = Math.max(size / image.naturalWidth, size / image.naturalHeight) * zoom;
+    var width = image.naturalWidth * scale;
+    var height = image.naturalHeight * scale;
+    var x = (size - width) / 2 + (Number(photoDraft.x) || 0) * size / 100;
+    var y = (size - height) / 2 + (Number(photoDraft.y) || 0) * size / 100;
+    context.fillStyle = "#f1f4f8";
+    context.fillRect(0, 0, size, size);
+    context.drawImage(image, x, y, width, height);
+    photoDraft.croppedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+  }
+
+  async function preparePhotoUpdate() {
+    if (!photoDraft.changed) return { changed: false };
+    if (photoDraft.remove) return { changed: true, remove: true, dataUrl: "" };
+    if (!photoDraft.dataUrl) return { changed: false };
+    if (!photoDraft.image) {
+      photoDraft.image = await loadImage(photoDraft.dataUrl);
+    }
+    if (!photoDraft.croppedDataUrl && els.photoPreviewCanvas) {
+      drawPhotoCrop(els.photoPreviewCanvas, photoDraft.image);
+    }
+    return {
+      changed: true,
+      remove: false,
+      dataUrl: photoDraft.croppedDataUrl || photoDraft.dataUrl
+    };
+  }
+
   function openAddInfoDialog() {
     var person = byId(state.selectedPersonId);
     var categorySelect = els.addInfoForm.elements.category;
@@ -1157,13 +1581,16 @@
       els.addInfoForm.elements.firstName.value = person.firstName || "";
       els.addInfoForm.elements.middleNames.value = person.middleNames || "";
       els.addInfoForm.elements.lastName.value = person.lastName || "";
+      els.addInfoForm.elements.birthDate.value = normalizeDateInput(person.birthDate);
       els.addInfoForm.elements.birthYear.value = person.birthYear || "";
+      els.addInfoForm.elements.birthPlace.value = person.birthPlace || "";
       els.addInfoForm.elements.gender.value = person.gender || "unknown";
     }
+    resetPhotoDraft(person);
     els.addInfoDialog.showModal();
   }
 
-  function submitAddInfo(event) {
+  async function submitAddInfo(event) {
     event.preventDefault();
     if (event.submitter && event.submitter.value === "cancel") {
       els.addInfoDialog.close();
@@ -1174,21 +1601,27 @@
     var firstName = String(form.get("firstName") || "").trim();
     var middleNames = String(form.get("middleNames") || "").trim();
     var lastName = String(form.get("lastName") || "").trim();
-    var birthYear = Number(form.get("birthYear")) || null;
+    var birthDate = normalizeDateInput(form.get("birthDate"));
+    var birthYear = birthDate ? yearFromDate(birthDate) : Number(form.get("birthYear")) || null;
+    var birthPlace = String(form.get("birthPlace") || "").trim();
     var gender = String(form.get("gender") || "unknown");
     var label = String(form.get("label") || "").trim();
     var value = String(form.get("value") || "").trim();
     var category = normalCategory(String(form.get("category") || "Additional"));
     var visibility = String(form.get("visibility") || "family");
+    var photoUpdate = await preparePhotoUpdate();
     var hasBasics = person && Boolean(
       firstName !== String(person.firstName || "").trim() ||
       middleNames !== String(person.middleNames || "").trim() ||
       lastName !== String(person.lastName || "").trim() ||
+      birthDate !== normalizeDateInput(person.birthDate) ||
       birthYear !== (person.birthYear || null) ||
+      birthPlace !== String(person.birthPlace || "").trim() ||
       gender !== (person.gender || "unknown")
     );
+    var hasPhotoUpdate = person && photoUpdate.changed;
     var hasDetail = Boolean(label && value);
-    if (!person || (!hasBasics && !hasDetail)) return;
+    if (!person || (!hasBasics && !hasPhotoUpdate && !hasDetail)) return;
     els.addInfoDialog.close();
 
     withUndo("Saved", function addInfo() {
@@ -1196,11 +1629,25 @@
         person.firstName = firstName;
         person.middleNames = middleNames;
         person.lastName = lastName;
+        person.birthDate = birthDate;
         person.birthYear = birthYear;
+        person.birthPlace = birthPlace;
         person.gender = gender;
         person.name = primaryName(person);
         if (firstName || lastName) person.placeholder = false;
         addActivity(CURRENT_USER_ID, "updated basics for " + primaryName(person));
+      }
+
+      if (hasPhotoUpdate) {
+        if (photoUpdate.remove) {
+          person.photoData = "";
+          person.photo = null;
+        } else {
+          person.photoData = photoUpdate.dataUrl;
+          person.photo = null;
+          person.placeholder = false;
+        }
+        addActivity(CURRENT_USER_ID, "updated photo for " + primaryName(person));
       }
 
       if (!hasDetail) return;
@@ -1465,7 +1912,9 @@
     }
     var form = new FormData(els.relativeForm);
     var name = String(form.get("name") || "").trim();
-    var birthYear = Number(form.get("birthYear")) || null;
+    var birthDate = normalizeDateInput(form.get("birthDate"));
+    var birthYear = birthDate ? yearFromDate(birthDate) : Number(form.get("birthYear")) || null;
+    var birthPlace = String(form.get("birthPlace") || "").trim();
     var gender = String(form.get("gender") || "unknown");
     var connection = String(form.get("connection") || "child");
     if (!name) return;
@@ -1481,8 +1930,11 @@
         firstName: nameParts.firstName,
         middleNames: nameParts.middleNames,
         lastName: nameParts.lastName,
+        birthDate: birthDate,
         birthYear: birthYear,
+        birthPlace: birthPlace,
         deathYear: null,
+        photoData: "",
         gender: gender,
         claimedBy: null,
         stewardId: CURRENT_USER_ID,
@@ -1553,7 +2005,8 @@
   function renderDuplicateMatches() {
     var form = new FormData(els.relativeForm);
     var name = String(form.get("name") || "").trim();
-    var birthYear = Number(form.get("birthYear")) || null;
+    var birthDate = normalizeDateInput(form.get("birthDate"));
+    var birthYear = birthDate ? yearFromDate(birthDate) : Number(form.get("birthYear")) || null;
     var matches = findDuplicates(name, birthYear);
     if (!matches.length) {
       els.duplicateResults.hidden = true;
@@ -1590,7 +2043,8 @@
         return personNameValue.includes(part);
       }).length;
       var firstNameMatch = parts[0] && personParts[0] === parts[0];
-      var yearClose = birthYear && person.birthYear && Math.abs(person.birthYear - birthYear) <= 3;
+      var personYear = birthYearValue(person);
+      var yearClose = birthYear && personYear && Math.abs(personYear - birthYear) <= 3;
       return exact || (sharedParts >= 2 && (!birthYear || yearClose)) || (firstNameMatch && yearClose);
     }).map(function score(person) {
       return { person: person };
@@ -1706,6 +2160,63 @@
     persist();
     event.currentTarget.reset();
     window.alert("Access request sent.");
+  }
+
+  function saveNow() {
+    persist();
+    showToast("Saved on this device", false);
+  }
+
+  function buildShareLink() {
+    var url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("person", state.selectedPersonId || CURRENT_USER_ID);
+    return url.toString();
+  }
+
+  async function shareCurrentView() {
+    var url = buildShareLink();
+    var shareText = "Open this Family Tree profile. Approval is still required before private details are shown.";
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Family Tree",
+          text: shareText,
+          url: url
+        });
+        showToast("Share link ready", false);
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
+    copyShareLink(url);
+  }
+
+  function copyShareLink(url) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(url).then(function copied() {
+        showToast("Share link copied", false);
+      }).catch(function fallbackCopy() {
+        promptForShareLink(url);
+      });
+      return;
+    }
+    promptForShareLink(url);
+  }
+
+  function promptForShareLink(url) {
+    window.prompt("Copy this share link", url);
+    showToast("Share link ready to copy", false);
+  }
+
+  function applyIncomingShareLink() {
+    var params = new URLSearchParams(window.location.search);
+    var personId = params.get("person");
+    if (personId && byId(personId)) {
+      state.selectedPersonId = personId;
+      state.relationshipA = personId;
+    }
   }
 
   function newId(prefix) {
@@ -1840,6 +2351,8 @@
     document.getElementById("demoButton").addEventListener("click", startDemo);
     els.demoNextButton.addEventListener("click", nextDemoStep);
     els.demoEndButton.addEventListener("click", endDemo);
+    els.saveButton.addEventListener("click", saveNow);
+    els.shareButton.addEventListener("click", shareCurrentView);
 
     document.getElementById("youButton").addEventListener("click", function goYou() {
       endDemo();
@@ -1931,6 +2444,11 @@
     });
 
     els.addInfoForm.addEventListener("submit", submitAddInfo);
+    els.profilePhotoInput.addEventListener("change", handlePhotoFileChange);
+    els.photoZoom.addEventListener("input", updatePhotoDraftFromControls);
+    els.photoX.addEventListener("input", updatePhotoDraftFromControls);
+    els.photoY.addEventListener("input", updatePhotoDraftFromControls);
+    els.photoRemoveButton.addEventListener("click", removePhotoDraft);
     els.suggestForm.addEventListener("submit", submitSuggestion);
     els.relativeForm.addEventListener("submit", submitRelative);
     els.relativeForm.addEventListener("input", renderDuplicateMatches);
@@ -2083,6 +2601,7 @@
   }
 
   loadSavedState();
+  applyIncomingShareLink();
   bindEvents();
   renderAll();
   initialCenter();

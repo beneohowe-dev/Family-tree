@@ -1,27 +1,10 @@
 {
-  "name": "motion-community-os",
+  "name": "private-family-network-prototype",
   "version": "0.1.0",
   "private": true,
-  "description": "Private relationship intelligence and opportunity mapping platform for Motion and Motion Foundation.",
+  "description": "A private collaborative family network prototype with isolated relationship logic.",
   "scripts": {
-    "dev": "next dev -p 4174",
-    "build": "next build",
-    "start": "next start -p 4174",
-    "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx tests/*.test.ts"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "2.112.3",
-    "lucide-react": "1.31.0",
-    "next": "16.3.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
-  },
-  "devDependencies": {
-    "@types/node": "26.2.0",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "tsx": "4.23.12",
-    "typescript": "7.0.2"
+    "start": "python3 -m http.server 4173",
+    "test": "node tests/relationship-engine.test.js"
   }
 }
