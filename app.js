@@ -874,7 +874,6 @@
       classes.push(frameClass(person));
       if (person.id === state.selectedPersonId) classes.push("selected");
       if (person.id === CURRENT_USER_ID) classes.push("you");
-      if (state.highlightPeople.size && !state.highlightPeople.has(person.id)) classes.push("muted");
       if (state.highlightPeople.has(person.id)) classes.push("highlight");
       return [
         "<button type=\"button\" class=\"" + classes.join(" ") + "\"",

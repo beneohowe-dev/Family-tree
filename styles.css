@@ -444,13 +444,42 @@ select:focus-visible,
   overflow: hidden;
   border-top: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
   background:
-    linear-gradient(90deg, rgba(58, 47, 35, 0.055) 0 1px, transparent 1px 25%),
-    linear-gradient(180deg, rgba(58, 47, 35, 0.055) 0 1px, transparent 1px 190px),
-    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.72), transparent 28%),
-    linear-gradient(135deg, #f6f1e8 0%, #fffdf8 48%, #ece3d5 100%);
-  background-size: 25% 100%, 100% 190px, auto, auto;
+    radial-gradient(circle at 18% 12%, rgba(255, 232, 204, 0.34), transparent 24%),
+    radial-gradient(circle at 78% 82%, rgba(50, 70, 72, 0.16), transparent 30%),
+    linear-gradient(180deg, rgba(22, 19, 16, 0.02), rgba(22, 19, 16, 0.18)),
+    radial-gradient(circle at 28px 17px, rgba(255, 236, 214, 0.08) 0 4px, transparent 5px),
+    radial-gradient(circle at 82px 34px, rgba(61, 38, 33, 0.08) 0 5px, transparent 6px),
+    repeating-linear-gradient(0deg, transparent 0 43px, rgba(207, 180, 158, 0.58) 43px 46px),
+    repeating-linear-gradient(0deg, #a3604d 0 46px, #814c43 46px 92px);
+  background-blend-mode: soft-light, multiply, normal, soft-light, multiply, normal, normal;
+  background-size: auto, auto, auto, 104px 92px, 104px 92px, auto, auto;
   touch-action: pan-x pan-y;
   overscroll-behavior: contain;
+}
+
+.map-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 100px, rgba(207, 180, 158, 0.58) 100px 103px);
+  background-size: 103px 92px;
+  -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 43px, transparent 43px 92px);
+  mask-image: repeating-linear-gradient(0deg, #000 0 43px, transparent 43px 92px);
+  pointer-events: none;
+}
+
+.map-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: repeating-linear-gradient(90deg, transparent 0 100px, rgba(207, 180, 158, 0.58) 100px 103px);
+  background-position: 51px 0;
+  background-size: 103px 92px;
+  -webkit-mask-image: repeating-linear-gradient(0deg, transparent 0 43px, #000 43px 89px, transparent 89px 92px);
+  mask-image: repeating-linear-gradient(0deg, transparent 0 43px, #000 43px 89px, transparent 89px 92px);
+  pointer-events: none;
 }
 
 .timeline-axis {
@@ -477,6 +506,7 @@ body.show-dates .timeline-axis {
   position: absolute;
   left: 0;
   top: 0;
+  z-index: 1;
   width: 3600px;
   height: 2400px;
   transform-origin: 0 0;
@@ -595,7 +625,7 @@ body.show-dates .timeline-axis {
 }
 
 .relationship-line.muted {
-  opacity: 0.14;
+  opacity: 0.42;
 }
 
 .relationship-line.highlight {
@@ -739,7 +769,7 @@ body.is-editing-tree .edit-only {
 }
 
 .person-node.muted {
-  opacity: 0.28;
+  opacity: 1;
 }
 
 .person-node.highlight {
@@ -776,11 +806,11 @@ body.is-editing-tree .edit-only {
 
 .portrait.ghost {
   background:
-    radial-gradient(circle at 50% 35%, rgba(62, 58, 51, 0.2) 0 18%, transparent 19%),
-    radial-gradient(ellipse at 50% 78%, rgba(62, 58, 51, 0.16) 0 34%, transparent 35%),
-    linear-gradient(180deg, rgba(252, 249, 242, 0.96), rgba(218, 211, 198, 0.86));
-  border-color: color-mix(in srgb, var(--line) 70%, white);
-  filter: sepia(0.14) saturate(0.45);
+    radial-gradient(circle at 50% 33%, rgba(78, 72, 63, 0.34) 0 18%, transparent 19%),
+    radial-gradient(ellipse at 50% 78%, rgba(78, 72, 63, 0.28) 0 35%, transparent 36%),
+    linear-gradient(180deg, rgba(250, 246, 236, 0.98), rgba(200, 190, 174, 0.96));
+  border-color: color-mix(in srgb, var(--line) 54%, white);
+  filter: sepia(0.08) saturate(0.72);
 }
 
 .person-node .node-name {
@@ -1860,12 +1890,6 @@ textarea {
     --photo-height: 146px;
     height: 62dvh;
     min-height: 460px;
-    background:
-      linear-gradient(90deg, rgba(58, 47, 35, 0.055) 0 1px, transparent 1px 25%),
-      linear-gradient(180deg, rgba(58, 47, 35, 0.055) 0 1px, transparent 1px 160px),
-      radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.72), transparent 28%),
-      linear-gradient(135deg, #f6f1e8 0%, #fffdf8 48%, #ece3d5 100%);
-    background-size: 25% 100%, 100% 160px, auto, auto;
   }
 
   .timeline-axis {
