@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f4f0">
+    <title>Family Tree</title>
+    <link rel="stylesheet" href="styles.css?v=20">
+  </head>
+  <body data-theme="gallery">
+    <a class="skip-link" href="#main">Skip to family tree</a>
+
+    <div class="app-frame" id="approvedApp">
+      <header class="topbar" aria-label="Family space navigation">
+        <div class="brand">
+          <span class="family-mark" aria-hidden="true">F</span>
+          <div>
+            <p class="eyebrow">Private family tree</p>
+            <h1>Family Tree</h1>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <label class="search-box" for="globalSearch" data-tooltip="Search only shows people and details you are allowed to see.">
+            <span class="visually-hidden">Search family</span>
+            <input id="globalSearch" type="search" autocomplete="off" placeholder="Find a person">
+          </label>
+          <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
+          <button class="button primary" id="youButton" type="button" data-tooltip="Centre the map on your claimed profile and show close family.">You</button>
+          <button class="button" id="connectionsButton" type="button" data-tooltip="Pick two people and see the family line between them.">How related?</button>
+          <button class="button icon-text" id="accessButton" type="button" aria-label="Invitations and access" data-tooltip="Invite approved family members or review access requests.">
+            <span aria-hidden="true">+</span>
+            <span>Invite</span>
+          </button>
+          <button class="button private-view-button" id="privateLandingButton" type="button" aria-label="View locked private landing page" data-tooltip="Shows what someone sees before family approval. The map stays locked so names, dates and photos stay private.">
+            <span>Locked view</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="main" class="main-layout">
+        <section class="map-region" aria-labelledby="mapTitle">
+          <div class="map-head">
+            <div>
+              <h2 id="mapTitle">Start your family tree</h2>
+            </div>
+            <div class="map-tools" aria-label="Map controls">
+              <button class="icon-button" id="zoomOutButton" type="button" aria-label="Zoom out" data-tooltip="Zoom out to see more of the family.">-</button>
+              <output id="zoomLevel" aria-live="polite">100%</output>
+              <button class="icon-button" id="zoomInButton" type="button" aria-label="Zoom in" data-tooltip="Zoom in for names and nearby connections.">+</button>
+              <button class="button compact" id="recenterButton" type="button" aria-label="Recenter map" data-tooltip="Bring the selected person back to the middle.">Center</button>
+              <button class="button compact" id="branchButton" type="button" data-tooltip="Add another parent, sibling, partner or child.">Add relative</button>
+            </div>
+          </div>
+
+          <div class="map-shell" id="mapShell" tabindex="0" aria-label="Pan and zoom family tree">
+            <div class="timeline-axis" aria-hidden="true">
+              <span class="timeline-label y1900">1900</span>
+              <span class="timeline-dot y1900"></span>
+              <span class="timeline-label y1930">1930</span>
+              <span class="timeline-dot y1930"></span>
+              <span class="timeline-label y1960">1960</span>
+              <span class="timeline-dot y1960"></span>
+              <span class="timeline-label y1990">1990</span>
+              <span class="timeline-dot y1990"></span>
+              <span class="timeline-label y2026">2026</span>
+              <span class="timeline-dot y2026"></span>
+            </div>
+            <div class="map-viewport" id="mapViewport">
+              <svg id="relationshipLines" viewBox="0 0 1560 980" aria-hidden="true"></svg>
+              <div class="node-layer" id="nodeLayer"></div>
+            </div>
+          </div>
+
+          <div class="search-results" id="searchResults" hidden></div>
+        </section>
+
+        <aside class="profile-panel" id="profilePanel" aria-live="polite"></aside>
+      </main>
+
+      <section class="lower-grid" aria-label="Family workspace">
+        <article class="workspace-panel connections-panel-collapsed" id="connectionsPanel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Connections</p>
+              <h2>How related?</h2>
+            </div>
+            <button class="icon-button" id="closeConnectionsButton" type="button" aria-label="Close relationship explorer" title="Close">x</button>
+          </div>
+          <div class="connection-picker">
+            <label>
+              Person A
+              <select id="personASelect"></select>
+            </label>
+            <label>
+              Person B
+              <select id="personBSelect"></select>
+            </label>
+          </div>
+          <div class="relationship-card" id="relationshipResult"></div>
+        </article>
+
+        <article class="workspace-panel explore-panel" id="explorePanel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Getting started</p>
+              <h2>Simple first steps</h2>
+            </div>
+            <select id="themeSelect" aria-label="Family theme">
+              <option value="gallery">Chalk</option>
+              <option value="heritage">Blush</option>
+              <option value="dark">Night</option>
+              <option value="colour">Mint</option>
+              <option value="minimal">Whiteout</option>
+            </select>
+          </div>
+          <div class="accent-row" aria-label="Accent colour">
+            <button class="swatch teal" data-accent="#8c8798" type="button" aria-label="Chalk accent"></button>
+            <button class="swatch berry" data-accent="#ff8ac5" type="button" aria-label="Pink accent"></button>
+            <button class="swatch moss" data-accent="#97c9b4" type="button" aria-label="Mint accent"></button>
+            <button class="swatch gold" data-accent="#20222a" type="button" aria-label="Ink accent"></button>
+          </div>
+          <div id="exploreContent" class="explore-content"></div>
+        </article>
+
+        <article class="workspace-panel history-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Safety</p>
+              <h2>Gentle editing</h2>
+            </div>
+            <button class="button compact" id="removedButton" type="button">Recently removed</button>
+          </div>
+          <ol class="activity-list" id="activityList"></ol>
+          <div class="removed-list" id="removedList" hidden></div>
+        </article>
+      </section>
+    </div>
+
+    <section class="private-gate" id="privateGate" hidden>
+      <div class="private-gate-inner">
+        <span class="family-mark large" aria-hidden="true">F</span>
+        <p class="eyebrow">Private family tree</p>
+        <h1>Family Tree</h1>
+        <p class="gate-copy">This is the locked view people see before approval. It shares no family names, profiles, photos or relationships.</p>
+        <form id="accessRequestForm" class="gate-form">
+          <label>
+            Name
+            <input name="name" autocomplete="name" required>
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Message
+            <textarea name="message" rows="3" placeholder="How are you connected?"></textarea>
+          </label>
+          <div class="form-actions">
+            <button class="button primary" type="submit">Request access</button>
+            <button class="button" id="approvedPreviewButton" type="button">Approved preview</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <div class="toast" id="toast" hidden>
+      <span id="toastMessage">Saved</span>
+      <button id="undoButton" type="button">Undo</button>
+    </div>
+
+    <div class="tooltip-bubble" id="tooltipBubble" role="tooltip" hidden></div>
+
+    <div class="demo-coach" id="demoCoach" role="status" aria-live="polite" hidden>
+      <p class="demo-count" id="demoStepCount">Step 1 of 6</p>
+      <h2 id="demoTitle">Start with You</h2>
+      <p id="demoText">Centre the map on your claimed profile.</p>
+      <div class="demo-actions">
+        <button class="button primary compact" id="demoNextButton" type="button">Next</button>
+        <button class="button compact" id="demoEndButton" type="button">Done</button>
+      </div>
+    </div>
+
+    <dialog id="addInfoDialog" class="modal">
+      <form method="dialog" id="addInfoForm">
+        <div class="modal-head">
+          <h2>Add something</h2>
+          <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
+        </div>
+        <div class="prompt-grid" id="promptGrid"></div>
+        <label>
+          Type
+          <select name="category" required></select>
+        </label>
+        <label>
+          Label
+          <input name="label" placeholder="Occupation, instrument, story" required>
+        </label>
+        <label>
+          Detail
+          <textarea name="value" rows="4" required></textarea>
+        </label>
+        <label>
+          Visibility
+          <select name="visibility">
+            <option value="family">Family</option>
+            <option value="connections">Connections</option>
+            <option value="only_me">Only me</option>
+          </select>
+        </label>
+        <div class="form-actions">
+          <button class="button primary" value="default" type="submit">Save</button>
+          <button class="button" value="cancel" type="submit">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="suggestDialog" class="modal">
+      <form method="dialog" id="suggestForm">
+        <div class="modal-head">
+          <h2>Suggest change</h2>
+          <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
+        </div>
+        <p id="suggestCurrent" class="muted"></p>
+        <label>
+          Suggested value
+          <textarea name="value" rows="4" required></textarea>
+        </label>
+        <label>
+          Message
+          <textarea name="message" rows="3"></textarea>
+        </label>
+        <div class="form-actions">
+          <button class="button primary" value="default" type="submit">Send suggestion</button>
+          <button class="button" value="cancel" type="submit">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="relativeDialog" class="modal">
+      <form method="dialog" id="relativeForm">
+        <div class="modal-head">
+          <h2>Add a relative</h2>
+          <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
+        </div>
+        <label>
+          Name
+          <input name="name" autocomplete="off" required>
+        </label>
+        <label>
+          Birth year
+          <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="Optional">
+        </label>
+        <label>
+          Gender
+          <select name="gender">
+            <option value="unknown">Not sure yet</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+          </select>
+        </label>
+        <label>
+          Connection
+          <select name="connection">
+            <option value="child">Child</option>
+            <option value="parent">Parent</option>
+            <option value="partner">Husband, wife or partner</option>
+            <option value="sibling">Sibling</option>
+          </select>
+        </label>
+        <div id="duplicateResults" class="duplicate-results" hidden></div>
+        <div class="form-actions">
+          <button class="button primary" value="default" type="submit">Create new person</button>
+          <button class="button" value="cancel" type="submit">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="accessDialog" class="modal wide">
+      <div class="modal-head">
+        <h2>Access</h2>
+        <button class="icon-button" id="closeAccessButton" type="button" aria-label="Close" title="Close">x</button>
+      </div>
+      <div class="access-grid">
+        <form id="inviteForm">
+          <h3>Invite by email</h3>
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Role
+            <select name="role">
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <button class="button primary" type="submit">Send invitation</button>
+        </form>
+        <section>
+          <h3>Access requests</h3>
+          <div id="accessRequests" class="request-list"></div>
+        </section>
+      </div>
+    </dialog>
+
+    <script src="relationship-engine.js?v=2"></script>
+    <script src="app.js?v=20"></script>
+  </body>
+</html>
