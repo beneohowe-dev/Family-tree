@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f8fc">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=27">
+    <link rel="stylesheet" href="styles.css?v=29">
   </head>
   <body data-theme="gallery">
     <a class="skip-link" href="#main">Skip to family tree</a>
@@ -25,11 +25,9 @@
             <span class="visually-hidden">Search family</span>
             <input id="globalSearch" type="search" autocomplete="off" placeholder="Find a person">
           </label>
-          <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
-          <button class="button" id="saveButton" type="button" data-tooltip="Save now. The tree also saves automatically each day on this device.">Save</button>
-          <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a link to this family tree view.">Share link</button>
-          <button class="button primary" id="youButton" type="button" data-tooltip="Centre the map on your profile and show close family.">You</button>
           <button class="button" id="connectionsButton" type="button" data-tooltip="Pick two people and see the family line between them.">How related?</button>
+          <button class="button primary" id="editModeButton" type="button" data-tooltip="Turn on editing tools for adding people, details and photos.">Edit tree</button>
+          <button class="icon-button" id="moreButton" type="button" aria-label="More options" data-tooltip="Save, share, appearance and recovery.">...</button>
           <span class="save-status" id="saveStatus" aria-live="polite">Saved on this device</span>
         </div>
       </header>
@@ -44,17 +42,17 @@
               <button class="icon-button" id="zoomOutButton" type="button" aria-label="Zoom out" data-tooltip="Zoom out to see more of the family.">-</button>
               <output id="zoomLevel" aria-live="polite">100%</output>
               <button class="icon-button" id="zoomInButton" type="button" aria-label="Zoom in" data-tooltip="Zoom in for names and nearby connections.">+</button>
-              <button class="button compact" id="recenterButton" type="button" aria-label="Recenter map" data-tooltip="Bring the selected person back to the middle.">Center</button>
-              <button class="button compact" id="branchButton" type="button" data-tooltip="Add another parent, sibling, partner or child.">Add relative</button>
+              <button class="button compact" id="fitTreeButton" type="button" data-tooltip="Show the complete visible family tree.">Fit tree</button>
+              <button class="button compact" id="recenterButton" type="button" aria-label="Centre on me" data-tooltip="Bring your profile back to the middle.">Me</button>
+              <button class="button compact" id="datesToggleButton" type="button" aria-pressed="false" data-tooltip="Show or hide a subtle date guide behind the tree.">Dates</button>
+              <button class="button compact edit-only" id="branchButton" type="button" data-tooltip="Add another parent, sibling, partner or child.">Add relative</button>
             </div>
           </div>
 
           <div class="map-shell" id="mapShell" tabindex="0" aria-label="Pan and zoom family tree">
-            <div class="timeline-axis" aria-hidden="true">
-              <span class="timeline-axis-title">Birth years</span>
-            </div>
+            <div class="timeline-axis" aria-hidden="true"></div>
             <div class="map-viewport" id="mapViewport">
-              <svg id="relationshipLines" viewBox="0 0 1560 980" aria-hidden="true"></svg>
+              <svg id="relationshipLines" viewBox="0 0 3600 2400" aria-hidden="true"></svg>
               <div class="node-layer" id="nodeLayer"></div>
             </div>
           </div>
@@ -65,7 +63,7 @@
         <aside class="profile-panel" id="profilePanel" aria-live="polite"></aside>
       </main>
 
-      <section class="lower-grid" aria-label="Family workspace">
+      <section class="lower-grid" id="lowerGrid" aria-label="Family workspace" hidden>
         <article class="workspace-panel connections-panel-collapsed" id="connectionsPanel">
           <div class="panel-head">
             <div>
@@ -87,27 +85,34 @@
           <div class="relationship-card" id="relationshipResult"></div>
         </article>
 
-        <article class="workspace-panel explore-panel" id="explorePanel">
+        <article class="workspace-panel appearance-panel" id="appearancePanel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Getting started</p>
-              <h2>Simple first steps</h2>
+              <p class="eyebrow">More</p>
+              <h2>Tree options</h2>
             </div>
-            <select id="themeSelect" aria-label="Family theme">
-              <option value="gallery">Pearl</option>
-              <option value="heritage">Blush</option>
-              <option value="dark">Graphite</option>
-              <option value="colour">Mint</option>
-              <option value="minimal">Studio</option>
-            </select>
           </div>
+          <div class="admin-actions">
+            <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
+            <button class="button" id="saveButton" type="button" data-tooltip="Save now. The tree also saves automatically each day on this device.">Save</button>
+            <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a link to this family tree view.">Share link</button>
+          </div>
+          <label>
+            Wall style
+            <select id="themeSelect" aria-label="Wall style">
+              <option value="gallery">Ivory linen</option>
+              <option value="heritage">Sage heritage</option>
+              <option value="colour">Botanical cream</option>
+              <option value="minimal">Warm taupe</option>
+              <option value="dark">Dark library</option>
+            </select>
+          </label>
           <div class="accent-row" aria-label="Accent colour">
             <button class="swatch teal" data-accent="#70717c" type="button" aria-label="Pearl accent"></button>
             <button class="swatch berry" data-accent="#c77aa0" type="button" aria-label="Blush accent"></button>
             <button class="swatch moss" data-accent="#75a993" type="button" aria-label="Mint accent"></button>
             <button class="swatch gold" data-accent="#111318" type="button" aria-label="Graphite accent"></button>
           </div>
-          <div id="exploreContent" class="explore-content"></div>
         </article>
 
         <article class="workspace-panel history-panel">
@@ -276,7 +281,7 @@
       </form>
     </dialog>
 
-    <script src="relationship-engine.js?v=2"></script>
-    <script src="app.js?v=27"></script>
+    <script src="relationship-engine.js?v=4"></script>
+    <script src="app.js?v=29"></script>
   </body>
 </html>

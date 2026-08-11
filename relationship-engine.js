@@ -358,6 +358,339 @@
     return [];
   }
 
+  function isParentType(type) {
+    return PARENT_TYPES.has(type);
+  }
+
+  function isPartnerType(type) {
+    return PARTNER_TYPES.has(type);
+  }
+
+  function sortByBirthThenName(a, b) {
+    var birthA = birthSortValue(a);
+    var birthB = birthSortValue(b);
+    if (birthA !== birthB) return birthA - birthB;
+    return String(a.name || a.id).localeCompare(String(b.name || b.id));
+  }
+
+  function birthSortValue(person) {
+    if (!person) return Number.POSITIVE_INFINITY;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(person.birthDate || ""))) {
+      return Number(String(person.birthDate).replace(/-/g, ""));
+    }
+    var year = Number(person.birthYear);
+    return Number.isFinite(year) && year > 0 ? year * 10000 : Number.POSITIVE_INFINITY;
+  }
+
+  function relationshipLevelDelta(relationship, currentId) {
+    if (isParentType(relationship.type)) {
+      if (relationship.from === currentId) return { id: relationship.to, delta: 1 };
+      if (relationship.to === currentId) return { id: relationship.from, delta: -1 };
+    }
+    if (isPartnerType(relationship.type) || relationship.type === "sibling" || relationship.type === "direct_cousin" || relationship.type === "direct_family_link") {
+      if (relationship.from === currentId) return { id: relationship.to, delta: 0 };
+      if (relationship.to === currentId) return { id: relationship.from, delta: 0 };
+    }
+    if (relationship.type === "direct_aunt_uncle") {
+      if (relationship.from === currentId) return { id: relationship.to, delta: 1 };
+      if (relationship.to === currentId) return { id: relationship.from, delta: -1 };
+    }
+    if (relationship.type === "direct_grandparent") {
+      if (relationship.from === currentId) return { id: relationship.to, delta: 2 };
+      if (relationship.to === currentId) return { id: relationship.from, delta: -2 };
+    }
+    if (relationship.type === "direct_grandchild") {
+      if (relationship.from === currentId) return { id: relationship.to, delta: -2 };
+      if (relationship.to === currentId) return { id: relationship.from, delta: 2 };
+    }
+    return null;
+  }
+
+  function personLevelMap(people, relationships, rootId) {
+    var ids = new Set(people.map(function toId(person) { return person.id; }));
+    var active = activeRelationships(relationships).filter(function hasPeople(relationship) {
+      return ids.has(relationship.from) && ids.has(relationship.to);
+    });
+    var levels = new Map();
+    var warnings = [];
+    var root = ids.has(rootId) ? rootId : (people[0] && people[0].id);
+    if (!root) return { levels: levels, warnings: warnings };
+    var queue = [root];
+    levels.set(root, 0);
+
+    while (queue.length) {
+      var current = queue.shift();
+      var currentLevel = levels.get(current);
+      active.forEach(function visit(relationship) {
+        if (relationship.from !== current && relationship.to !== current) return;
+        var next = relationshipLevelDelta(relationship, current);
+        if (!next || !ids.has(next.id)) return;
+        var wanted = currentLevel + next.delta;
+        if (!levels.has(next.id)) {
+          levels.set(next.id, wanted);
+          queue.push(next.id);
+        } else if (levels.get(next.id) !== wanted && isParentType(relationship.type)) {
+          warnings.push({
+            type: "generation_conflict",
+            relationshipId: relationship.id,
+            personId: next.id
+          });
+        }
+      });
+    }
+
+    people.forEach(function assignDisconnected(person) {
+      if (!levels.has(person.id)) levels.set(person.id, 0);
+    });
+
+    var changed = true;
+    var guard = 0;
+    while (changed && guard < 10) {
+      changed = false;
+      guard += 1;
+      active.forEach(function alignPartners(relationship) {
+        if (!isPartnerType(relationship.type)) return;
+        var fromLevel = levels.get(relationship.from);
+        var toLevel = levels.get(relationship.to);
+        if (fromLevel == null || toLevel == null || fromLevel === toLevel) return;
+        var aligned = Math.min(fromLevel, toLevel);
+        if (levels.get(relationship.from) !== aligned) {
+          levels.set(relationship.from, aligned);
+          changed = true;
+        }
+        if (levels.get(relationship.to) !== aligned) {
+          levels.set(relationship.to, aligned);
+          changed = true;
+        }
+      });
+    }
+
+    return { levels: levels, warnings: warnings };
+  }
+
+  function disjointSet(items) {
+    var parent = new Map();
+    items.forEach(function init(item) { parent.set(item, item); });
+    function find(item) {
+      var current = parent.get(item);
+      if (current !== item) {
+        current = find(current);
+        parent.set(item, current);
+      }
+      return current;
+    }
+    function union(a, b) {
+      var rootA = find(a);
+      var rootB = find(b);
+      if (rootA !== rootB) parent.set(rootB, rootA);
+    }
+    return { find: find, union: union };
+  }
+
+  function familyGroups(people, relationships) {
+    var ids = new Set(people.map(function toId(person) { return person.id; }));
+    var groups = new Map();
+    activeRelationships(relationships).forEach(function collect(relationship) {
+      if (!isParentType(relationship.type) || !ids.has(relationship.from) || !ids.has(relationship.to)) return;
+      var childId = relationship.to;
+      var parents = activeRelationships(relationships).filter(function parentForChild(candidate) {
+        return isParentType(candidate.type) && candidate.to === childId && ids.has(candidate.from);
+      }).map(function toParent(candidate) {
+        return candidate.from;
+      }).sort();
+      var key = parents.length ? parents.join(":") : relationship.from;
+      if (!groups.has(key)) groups.set(key, { key: key, parentIds: parents, childIds: [] });
+      if (groups.get(key).childIds.indexOf(childId) === -1) groups.get(key).childIds.push(childId);
+    });
+    return Array.from(groups.values());
+  }
+
+  function layoutFamilyTree(people, relationships, options) {
+    var settings = options || {};
+    var activePeople = people.filter(function visible(person) {
+      return person && person.status !== "deleted";
+    });
+    var byId = new Map(activePeople.map(function pair(person) {
+      return [person.id, person];
+    }));
+    var nodeWidth = settings.nodeWidth || 168;
+    var nodeHeight = settings.nodeHeight || 248;
+    var partnerGap = settings.partnerGap || 34;
+    var unitGap = settings.unitGap || 116;
+    var rowGap = settings.rowGap || 310;
+    var originX = settings.originX || 1800;
+    var originY = settings.originY || 1240;
+    var levelInfo = personLevelMap(activePeople, relationships, settings.rootId);
+    var levels = levelInfo.levels;
+    var active = activeRelationships(relationships);
+    var ids = new Set(activePeople.map(function toId(person) { return person.id; }));
+    var groups = familyGroups(activePeople, relationships);
+    var graph = createGraph(activePeople, relationships);
+    var rowIds = new Map();
+    var unitsByRoot = new Map();
+    var unitByPerson = new Map();
+    var positioned = new Map();
+    var warnings = levelInfo.warnings.slice();
+
+    activePeople.forEach(function rowPerson(person) {
+      var level = levels.get(person.id) || 0;
+      if (!rowIds.has(level)) rowIds.set(level, []);
+      rowIds.get(level).push(person.id);
+    });
+
+    rowIds.forEach(function buildUnits(idsInRow, level) {
+      var dsu = disjointSet(idsInRow);
+      active.forEach(function joinPartners(relationship) {
+        if (!isPartnerType(relationship.type)) return;
+        if (idsInRow.indexOf(relationship.from) === -1 || idsInRow.indexOf(relationship.to) === -1) return;
+        dsu.union(relationship.from, relationship.to);
+      });
+      var units = new Map();
+      idsInRow.forEach(function addToUnit(id) {
+        var root = dsu.find(id);
+        if (!units.has(root)) {
+          units.set(root, {
+            id: level + ":" + root,
+            level: level,
+            personIds: [],
+            width: 0,
+            desiredX: null
+          });
+        }
+        units.get(root).personIds.push(id);
+      });
+      units.forEach(function finishUnit(unit) {
+        unit.personIds = unit.personIds.map(function toPerson(id) {
+          return byId.get(id);
+        }).filter(Boolean).sort(sortByBirthThenName).map(function toId(person) {
+          return person.id;
+        });
+        unit.width = unit.personIds.length * nodeWidth + Math.max(0, unit.personIds.length - 1) * partnerGap;
+        unitsByRoot.set(unit.id, unit);
+        unit.personIds.forEach(function indexPerson(id) {
+          unitByPerson.set(id, unit);
+        });
+      });
+    });
+
+    function knownPosition(id) {
+      return positioned.get(id);
+    }
+
+    function desiredForUnit(unit) {
+      if (unit.personIds.indexOf(settings.rootId) !== -1) return originX;
+      var related = [];
+      unit.personIds.forEach(function collect(personId) {
+        (graph.parentsByChild.get(personId) || []).forEach(function add(parent) {
+          var point = knownPosition(parent.id);
+          if (point) related.push(point.x);
+        });
+        (graph.childrenByParent.get(personId) || []).forEach(function add(child) {
+          var point = knownPosition(child.id);
+          if (point) related.push(point.x);
+        });
+      });
+      if (related.length) {
+        return related.reduce(function sum(total, value) { return total + value; }, 0) / related.length;
+      }
+      var previous = unit.personIds.map(function previousX(id) {
+        return byId.get(id) && Number.isFinite(byId.get(id).x) ? byId.get(id).x : null;
+      }).filter(function valid(value) { return value != null; });
+      if (previous.length) {
+        return previous.reduce(function sum(total, value) { return total + value; }, 0) / previous.length;
+      }
+      return originX;
+    }
+
+    function placeRow(units, level) {
+      units.forEach(function score(unit) {
+        unit.desiredX = desiredForUnit(unit);
+      });
+      units.sort(function sortUnits(a, b) {
+        if (a.desiredX !== b.desiredX) return a.desiredX - b.desiredX;
+        var firstA = byId.get(a.personIds[0]);
+        var firstB = byId.get(b.personIds[0]);
+        return sortByBirthThenName(firstA, firstB);
+      });
+      var cursor = null;
+      units.forEach(function assignUnit(unit) {
+        var left = unit.desiredX - unit.width / 2;
+        if (cursor == null) cursor = left;
+        left = Math.max(left, cursor);
+        unit.left = left;
+        unit.center = left + unit.width / 2;
+        cursor = left + unit.width + unitGap;
+      });
+      var anchorUnit = units.find(function hasRoot(unit) {
+        return unit.personIds.indexOf(settings.rootId) !== -1;
+      });
+      var shift = 0;
+      if (anchorUnit) {
+        shift = originX - anchorUnit.center;
+      } else if (units.length && !units.some(function hasRelated(unit) { return unit.personIds.some(function hasKnown(personId) {
+        return (graph.parentsByChild.get(personId) || []).some(function parentKnown(parent) { return knownPosition(parent.id); }) ||
+          (graph.childrenByParent.get(personId) || []).some(function childKnown(child) { return knownPosition(child.id); });
+      }); })) {
+        var minLeft = Math.min.apply(null, units.map(function left(unit) { return unit.left; }));
+        var maxRight = Math.max.apply(null, units.map(function right(unit) { return unit.left + unit.width; }));
+        shift = originX - (minLeft + maxRight) / 2;
+      }
+      units.forEach(function positionUnit(unit) {
+        var left = unit.left + shift;
+        unit.personIds.forEach(function positionPerson(personId, index) {
+          positioned.set(personId, {
+            x: Math.round(left + nodeWidth / 2 + index * (nodeWidth + partnerGap)),
+            y: Math.round(originY + level * rowGap),
+            generation: level
+          });
+        });
+      });
+    }
+
+    var generationLevels = Array.from(rowIds.keys()).sort(function numeric(a, b) { return a - b; });
+    generationLevels.forEach(function layoutLevel(level) {
+      var units = Array.from(unitsByRoot.values()).filter(function sameLevel(unit) {
+        return unit.level === level;
+      });
+      placeRow(units, level);
+    });
+
+    groups.forEach(function sortChildren(group) {
+      group.childIds = group.childIds.map(function toPerson(id) {
+        return byId.get(id);
+      }).filter(Boolean).sort(sortByBirthThenName).map(function toId(person) {
+        return person.id;
+      });
+    });
+
+    return {
+      positions: positioned,
+      generations: levels,
+      familyGroups: groups,
+      warnings: warnings,
+      bounds: layoutBounds(positioned, nodeWidth, nodeHeight)
+    };
+  }
+
+  function layoutBounds(positions, nodeWidth, nodeHeight) {
+    var points = Array.from(positions.values());
+    if (!points.length) return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
+    var halfW = nodeWidth / 2;
+    var halfH = nodeHeight / 2;
+    var minX = Math.min.apply(null, points.map(function min(point) { return point.x - halfW; }));
+    var maxX = Math.max.apply(null, points.map(function max(point) { return point.x + halfW; }));
+    var minY = Math.min.apply(null, points.map(function min(point) { return point.y - halfH; }));
+    var maxY = Math.max.apply(null, points.map(function max(point) { return point.y + halfH; }));
+    return {
+      minX: minX,
+      minY: minY,
+      maxX: maxX,
+      maxY: maxY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+
   function closestCommonAncestors(personAId, personBId, graph) {
     var ancestorsA = findAncestors(personAId, graph);
     var ancestorsB = findAncestors(personBId, graph);
@@ -670,11 +1003,65 @@
     };
   }
 
+  function isAncestorOf(ancestorId, descendantId, graph) {
+    var queue = [ancestorId];
+    var visited = new Set([ancestorId]);
+    while (queue.length) {
+      var current = queue.shift();
+      var children = graph.childrenByParent.get(current) || [];
+      for (var index = 0; index < children.length; index += 1) {
+        var childId = children[index].id;
+        if (childId === descendantId) return true;
+        if (visited.has(childId)) continue;
+        visited.add(childId);
+        queue.push(childId);
+      }
+    }
+    return false;
+  }
+
+  function validateRelationshipAddition(people, relationships, candidate) {
+    var graph = createGraph(people, relationships);
+    if (!candidate || !candidate.from || !candidate.to || !candidate.type) {
+      return { valid: false, message: "Choose two people and a relationship first." };
+    }
+    if (!graph.byId.has(candidate.from) || !graph.byId.has(candidate.to)) {
+      return { valid: false, message: "One of these people is no longer in the visible tree." };
+    }
+    if (candidate.from === candidate.to) {
+      return { valid: false, message: "Someone cannot be related to themselves in that way." };
+    }
+    var duplicate = activeRelationships(relationships).some(function same(existing) {
+      if (existing.type !== candidate.type) return false;
+      if (existing.from === candidate.from && existing.to === candidate.to) return true;
+      return (isPartnerType(existing.type) || existing.type === "sibling" || existing.type === "direct_cousin" || existing.type === "direct_family_link") &&
+        existing.from === candidate.to &&
+        existing.to === candidate.from;
+    });
+    if (duplicate) {
+      return { valid: false, message: "That family connection already exists." };
+    }
+    if (isParentType(candidate.type)) {
+      if (isAncestorOf(candidate.to, candidate.from, graph)) {
+        return { valid: false, message: "That would create a loop in the family tree." };
+      }
+      var reverseParent = activeRelationships(relationships).some(function reverse(existing) {
+        return isParentType(existing.type) && existing.from === candidate.to && existing.to === candidate.from;
+      });
+      if (reverseParent) {
+        return { valid: false, message: "Two people cannot be each other's parent and child." };
+      }
+    }
+    return { valid: true, message: "" };
+  }
+
   return {
     createGraph: createGraph,
     describeRelationship: describeRelationship,
     findAncestors: findAncestors,
     shortestPath: shortestPath,
-    closestCommonAncestors: closestCommonAncestors
+    closestCommonAncestors: closestCommonAncestors,
+    layoutFamilyTree: layoutFamilyTree,
+    validateRelationshipAddition: validateRelationshipAddition
   };
 });

@@ -120,6 +120,9 @@
     highlightPath: [],
     highlightPeople: new Set(),
     pendingSuggestFieldId: null,
+    editMode: false,
+    showDates: false,
+    moreOpen: false,
     theme: "gallery",
     accent: "#70717c"
   };
@@ -127,11 +130,18 @@
   var lastUndo = null;
   var toastTimer = null;
   var photoDraft = emptyPhotoDraft();
-  var TREE_NODE_HALF = 92;
+  var lastLayout = null;
+  var suppressNextPersonClick = false;
+  var TREE_WORLD_WIDTH = 3600;
+  var TREE_WORLD_HEIGHT = 2400;
+  var TREE_NODE_WIDTH = 168;
+  var TREE_NODE_HEIGHT = 248;
+  var TREE_NODE_HALF_X = TREE_NODE_WIDTH / 2;
+  var TREE_NODE_HALF_Y = TREE_NODE_HEIGHT / 2;
   var TIMELINE_START_YEAR = 1900;
   var TIMELINE_END_YEAR = 2026;
-  var TIMELINE_TOP_Y = 130;
-  var TIMELINE_BOTTOM_Y = 850;
+  var TIMELINE_TOP_Y = 360;
+  var TIMELINE_BOTTOM_Y = 2050;
   var TIMELINE_AXIS_X = 118;
   var TIMELINE_TICKS = [1900, 1930, 1960, 1990, 2026];
 
@@ -151,6 +161,7 @@
     personBSelect: document.getElementById("personBSelect"),
     relationshipResult: document.getElementById("relationshipResult"),
     exploreContent: document.getElementById("exploreContent"),
+    lowerGrid: document.getElementById("lowerGrid"),
     activityList: document.getElementById("activityList"),
     removedList: document.getElementById("removedList"),
     dailySaveList: document.getElementById("dailySaveList"),
@@ -180,6 +191,10 @@
     saveButton: document.getElementById("saveButton"),
     shareButton: document.getElementById("shareButton"),
     saveStatus: document.getElementById("saveStatus"),
+    editModeButton: document.getElementById("editModeButton"),
+    moreButton: document.getElementById("moreButton"),
+    fitTreeButton: document.getElementById("fitTreeButton"),
+    datesToggleButton: document.getElementById("datesToggleButton"),
     themeSelect: document.getElementById("themeSelect"),
     demoCoach: document.getElementById("demoCoach"),
     demoStepCount: document.getElementById("demoStepCount"),
@@ -192,11 +207,12 @@
   var demoIndex = -1;
   var demoSteps = [
     {
-      selector: "#youButton",
+      selector: "[data-person-id=\"you\"]",
       title: "Start with You",
       text: "This is the safe starting point. Add your own name first, then work up to parents.",
       prepare: function prepareYou() {
         closeFloatingSurfaces();
+        state.editMode = false;
         state.selectedPersonId = CURRENT_USER_ID;
         state.collapsedBranches = false;
         highlightImmediateFamily(CURRENT_USER_ID);
@@ -218,7 +234,18 @@
       title: "Fill in one person",
       text: "Tap any blank portrait. The side panel tells you what to add without showing a giant form.",
       prepare: function prepareProfile() {
+        state.editMode = false;
         selectPerson(CURRENT_USER_ID, true);
+      }
+    },
+    {
+      selector: "#editModeButton",
+      title: "Turn on editing",
+      text: "Browsing stays clean. Tap Edit tree only when you want to add people, details or photos.",
+      prepare: function prepareEditMode() {
+        closeFloatingSurfaces();
+        state.editMode = false;
+        renderAll();
       }
     },
     {
@@ -226,6 +253,7 @@
       title: "Fill in basics",
       text: "Add first and last name, birth details, birthplace, gender and a photo when you have one.",
       prepare: function prepareAdd() {
+        state.editMode = true;
         selectPerson(CURRENT_USER_ID, true);
       }
     },
@@ -235,6 +263,7 @@
       text: "Choose who the new person is: parent, sibling, child, cousin, partner or another family role.",
       prepare: function prepareRelative() {
         closeFloatingSurfaces();
+        state.editMode = true;
         selectPerson(CURRENT_USER_ID, true);
       }
     },
@@ -246,6 +275,8 @@
         closeFloatingSurfaces();
         if (els.privateGate) els.privateGate.hidden = true;
         els.approvedApp.hidden = false;
+        state.moreOpen = true;
+        renderAll();
       }
     },
     {
@@ -268,6 +299,8 @@
         closeFloatingSurfaces();
         if (els.privateGate) els.privateGate.hidden = true;
         els.approvedApp.hidden = false;
+        state.moreOpen = true;
+        renderAll();
       }
     }
   ];
@@ -548,9 +581,9 @@
   function years(person) {
     var birthYear = birthYearValue(person);
     if (!birthYear && !person.deathYear) return "";
-    if (birthYear && person.deathYear) return birthYear + "-" + person.deathYear;
-    if (birthYear) return "b. " + birthYear;
-    return "d. " + person.deathYear;
+    if (birthYear && person.deathYear) return birthYear + " - " + person.deathYear;
+    if (birthYear) return birthYear + " -";
+    return "? - " + person.deathYear;
   }
 
   function primaryName(person) {
@@ -730,7 +763,8 @@
         state: {
           selectedPersonId: state.selectedPersonId,
           theme: state.theme,
-          accent: state.accent
+          accent: state.accent,
+          showDates: state.showDates
         }
       }));
       rememberDailySnapshot();
@@ -763,6 +797,7 @@
         state.selectedPersonId = saved.state.selectedPersonId || state.selectedPersonId;
         state.theme = saved.state.theme || state.theme;
         state.accent = saved.state.accent || state.accent;
+        state.showDates = Boolean(saved.state.showDates);
       }
     } catch (error) {
       console.warn("Unable to load local prototype state.", error);
@@ -782,6 +817,19 @@
 
   function renderAll() {
     applyTheme();
+    document.body.classList.toggle("is-editing-tree", state.editMode);
+    document.body.classList.toggle("is-more-open", state.moreOpen);
+    if (els.lowerGrid) {
+      els.lowerGrid.hidden = !state.moreOpen && els.connectionsPanel.classList.contains("connections-panel-collapsed");
+    }
+    if (els.editModeButton) {
+      els.editModeButton.textContent = state.editMode ? "Done editing" : "Edit tree";
+      els.editModeButton.setAttribute("aria-pressed", String(state.editMode));
+    }
+    if (els.datesToggleButton) {
+      els.datesToggleButton.setAttribute("aria-pressed", String(state.showDates));
+      els.datesToggleButton.classList.toggle("active", state.showDates);
+    }
     renderSelectors();
     renderMap();
     renderProfile();
@@ -808,19 +856,22 @@
   }
 
   function renderMap() {
-    applyAgeAwareLayout();
+    applyGenealogyLayout();
     var peopleToRender = visiblePeople();
     var visibleIds = new Set(peopleToRender.map(function toId(person) { return person.id; }));
     var pathPairs = pathPairSet(state.highlightPath);
 
+    document.body.classList.toggle("show-dates", state.showDates);
     els.mapShell.classList.toggle("is-overview", state.zoom < 0.52);
     els.zoomLevel.value = Math.round(state.zoom * 100) + "%";
+    clampPan();
     els.mapViewport.style.transform = "translate(" + state.panX + "px, " + state.panY + "px) scale(" + state.zoom + ")";
 
-    renderTreeLines(visibleIds, pathPairs, peopleToRender);
+    renderTreeLines(visibleIds, pathPairs, peopleToRender, lastLayout);
 
-    els.nodeLayer.innerHTML = peopleToRender.map(function node(person) {
+    var nodeHtml = peopleToRender.map(function node(person) {
       var classes = ["person-node", genderClass(person)];
+      classes.push(frameClass(person));
       if (person.id === state.selectedPersonId) classes.push("selected");
       if (person.id === CURRENT_USER_ID) classes.push("you");
       if (state.highlightPeople.size && !state.highlightPeople.has(person.id)) classes.push("muted");
@@ -828,86 +879,63 @@
       return [
         "<button type=\"button\" class=\"" + classes.join(" ") + "\"",
         " data-person-id=\"" + escapeHTML(person.id) + "\"",
-        " data-photo-drop-person-id=\"" + escapeHTML(person.id) + "\"",
+        state.editMode ? " data-photo-drop-person-id=\"" + escapeHTML(person.id) + "\"" : "",
         " aria-label=\"Open " + escapeHTML(primaryName(person)) + "\"",
         " style=\"left:" + person.x + "px;top:" + person.y + "px\">",
         portraitMarkup(person),
         "<span class=\"node-name\">" + escapeHTML(primaryName(person)) + "</span>",
-        "<span class=\"node-years\">" + escapeHTML(years(person) || person.roleHint || "Tap to fill in") + "</span>",
-        person.partnerPrompt ? "<span class=\"node-suggestion\">" + escapeHTML(person.partnerPrompt) + "</span>" : "",
-        person.id === CURRENT_USER_ID ? "<span class=\"node-tag\">You</span>" : "",
+        "<span class=\"node-years\">" + escapeHTML(years(person) || "Unknown") + "</span>",
+        person.id === CURRENT_USER_ID ? "<span class=\"node-tag\" aria-label=\"You\"></span>" : "",
         "</button>"
       ].join("");
     }).join("");
+    els.nodeLayer.innerHTML = nodeHtml + renderEditHandles();
 
   }
 
-  function applyAgeAwareLayout() {
-    var currentGraph = graph();
-    var handledChildren = new Set();
-    var childGroups = new Map();
+  function renderEditHandles() {
+    if (!state.editMode) return "";
+    var person = byId(state.selectedPersonId);
+    if (!person || person.status === "deleted") return "";
+    var actions = [
+      { key: "parent", label: "+ Parent", tooltip: "Add this person's mother, father or parent above them.", x: 0, y: -TREE_NODE_HALF_Y - 56 },
+      { key: "sibling", label: "+ Sibling", tooltip: "Add a brother or sister on the same generation line.", x: -TREE_NODE_HALF_X - 78, y: 0 },
+      { key: "partner", label: "+ Partner", tooltip: "Add a husband, wife or partner beside this person.", x: TREE_NODE_HALF_X + 78, y: 0 },
+      { key: "child", label: "+ Child", tooltip: "Add this person's child below them.", x: 0, y: TREE_NODE_HALF_Y + 56 }
+    ];
+    return [
+      "<div class=\"edit-handle-layer\" style=\"left:" + person.x + "px;top:" + person.y + "px\">",
+      actions.map(function renderAction(action) {
+        return [
+          "<button class=\"edit-handle " + escapeHTML(action.key) + "\" type=\"button\"",
+          " data-open-relative data-default-connection=\"" + escapeHTML(action.key) + "\"",
+          " data-tooltip=\"" + escapeHTML(action.tooltip) + "\"",
+          " style=\"left:" + action.x + "px;top:" + action.y + "px\">",
+          escapeHTML(action.label),
+          "</button>"
+        ].join("");
+      }).join(""),
+      "</div>"
+    ].join("");
+  }
 
-    activeRelationships().filter(function parentRelationship(relationshipItem) {
-      return isParentRelationshipType(relationshipItem.type);
-    }).forEach(function groupByParents(relationshipItem) {
-      var child = byId(relationshipItem.to);
-      if (!child || child.status === "deleted") return;
-      var parentIds = (currentGraph.parentsByChild.get(child.id) || [])
-        .map(function toId(parentRef) { return parentRef.id; })
-        .filter(function exists(parentId) { return Boolean(byId(parentId)); })
-        .sort();
-      if (!parentIds.length) return;
-      var key = parentIds.join(":");
-      if (!childGroups.has(key)) {
-        childGroups.set(key, { parentIds: parentIds, children: [] });
-      }
-      var group = childGroups.get(key);
-      if (!group.children.some(function already(existing) { return existing.id === child.id; })) {
-        group.children.push(child);
-      }
+  function applyGenealogyLayout() {
+    lastLayout = window.RelationshipEngine.layoutFamilyTree(people, activeRelationships(), {
+      rootId: CURRENT_USER_ID,
+      nodeWidth: TREE_NODE_WIDTH,
+      nodeHeight: TREE_NODE_HEIGHT,
+      originX: TREE_WORLD_WIDTH / 2,
+      originY: TREE_WORLD_HEIGHT / 2 + 130,
+      rowGap: 330,
+      partnerGap: 34,
+      unitGap: 128
     });
-
-    childGroups.forEach(function layoutFamilyGroup(group) {
-      var children = sortOldestFirst(group.children);
-      if (!children.length) return;
-      var parents = sortOldestFirst(group.parentIds.map(byId).filter(Boolean));
-      var childRowY = average(children.map(function yOf(child) { return child.y; })) || 530;
-      var parentRowY = parents.length ? average(parents.map(function yOf(parentPerson) { return parentPerson.y; })) || childRowY - 300 : childRowY - 300;
-      var centerX = average(children.concat(parents).map(function xOf(person) { return person.x; })) || 620;
-      layoutRow(children, centerX, childRowY, 200);
-      layoutRow(parents, centerX, parentRowY, 200);
-      children.forEach(function mark(child) { handledChildren.add(child.id); });
-    });
-
-    var ungroupedChildrenByParent = new Map();
-    activeRelationships().filter(function parentRelationship(relationshipItem) {
-      return isParentRelationshipType(relationshipItem.type);
-    }).forEach(function collectSingleParent(relationshipItem) {
-      var child = byId(relationshipItem.to);
-      if (!child || child.status === "deleted" || handledChildren.has(child.id)) return;
-      if (!ungroupedChildrenByParent.has(relationshipItem.from)) {
-        ungroupedChildrenByParent.set(relationshipItem.from, []);
-      }
-      ungroupedChildrenByParent.get(relationshipItem.from).push(child);
-    });
-
-    ungroupedChildrenByParent.forEach(function layoutSingleParentChildren(children, parentId) {
-      var parentPerson = byId(parentId);
-      if (!parentPerson) return;
-      var sortedChildren = sortOldestFirst(children);
-      layoutRow(sortedChildren, parentPerson.x, average(sortedChildren.map(function yOf(child) { return child.y; })) || parentPerson.y + 300, 200);
-    });
-
-    activeRelationships().filter(function partnerRelationship(relationshipItem) {
-      return isPartnerRelationshipType(relationshipItem.type);
-    }).forEach(function layoutPartnerPair(relationshipItem) {
-      var a = byId(relationshipItem.from);
-      var b = byId(relationshipItem.to);
-      if (!a || !b || a.status === "deleted" || b.status === "deleted") return;
-      var pair = sortOldestFirst([a, b]);
-      var centerX = average([a.x, b.x]);
-      var centerY = average([a.y, b.y]);
-      layoutRow(pair, centerX, centerY, 200);
+    people.forEach(function applyPosition(person) {
+      var point = lastLayout.positions.get(person.id);
+      if (!point) return;
+      person.x = point.x;
+      person.y = point.y;
+      person.generation = point.generation;
     });
   }
 
@@ -916,7 +944,7 @@
     var startX = centerX - ((items.length - 1) * gap) / 2;
     items.forEach(function place(person, index) {
       person.x = Math.round(startX + index * gap);
-      person.y = Math.round(timelineYForPerson(person, y));
+      person.y = Math.round(y);
     });
   }
 
@@ -930,7 +958,7 @@
     }, 0) / numbers.length;
   }
 
-  function renderTreeLines(visibleIds, pathPairs, peopleToRender) {
+  function renderTreeLines(visibleIds, pathPairs, peopleToRender, layout) {
     els.relationshipLines.innerHTML = "";
     renderTimelineGuides(peopleToRender);
     var partnerRelationships = activeRelationships().filter(function isPartner(relationshipItem) {
@@ -948,24 +976,39 @@
       var from = byId(relationshipItem.from);
       var to = byId(relationshipItem.to);
       if (!from || !to) return;
-      var fromX = from.x < to.x ? from.x + TREE_NODE_HALF : from.x - TREE_NODE_HALF;
-      var toX = from.x < to.x ? to.x - TREE_NODE_HALF : to.x + TREE_NODE_HALF;
+      var fromX = from.x < to.x ? from.x + TREE_NODE_HALF_X : from.x - TREE_NODE_HALF_X;
+      var toX = from.x < to.x ? to.x - TREE_NODE_HALF_X : to.x + TREE_NODE_HALF_X;
       var midX = Math.round((fromX + toX) / 2);
       drawPath("M" + fromX + " " + from.y + " H" + midX + " V" + to.y + " H" + toX, relationshipItem, pathPairs, true);
     });
 
-    parentRelationships.forEach(function drawParent(relationshipItem) {
-      if (!visibleIds.has(relationshipItem.from) || !visibleIds.has(relationshipItem.to)) return;
-      var from = byId(relationshipItem.from);
-      var to = byId(relationshipItem.to);
-      if (!from || !to) return;
-      var midY = Math.round((from.y + to.y) / 2);
-      drawPath(
-        "M" + from.x + " " + (from.y + TREE_NODE_HALF) + " V" + midY + " H" + to.x + " V" + (to.y - TREE_NODE_HALF),
-        relationshipItem,
-        pathPairs,
-        false
-      );
+    (layout && layout.familyGroups ? layout.familyGroups : []).forEach(function drawFamilyGroup(group) {
+      var parents = group.parentIds.map(byId).filter(function visibleParent(person) {
+        return person && visibleIds.has(person.id);
+      });
+      var children = group.childIds.map(byId).filter(function visibleChild(person) {
+        return person && visibleIds.has(person.id);
+      });
+      if (!parents.length || !children.length) return;
+      var parentCenterX = Math.round(average(parents.map(function xOf(person) { return person.x; })));
+      var parentLineY = Math.round(average(parents.map(function yOf(person) { return person.y; })));
+      var parentBottomY = Math.max.apply(null, parents.map(function bottom(person) {
+        return person.y + TREE_NODE_HALF_Y;
+      }));
+      var childTopY = Math.min.apply(null, children.map(function top(person) {
+        return person.y - TREE_NODE_HALF_Y;
+      }));
+      var branchY = Math.round(parentBottomY + Math.max(60, (childTopY - parentBottomY) * 0.42));
+      var minChildX = Math.min.apply(null, children.map(function xOf(person) { return person.x; }));
+      var maxChildX = Math.max.apply(null, children.map(function xOf(person) { return person.x; }));
+      var familyPath = "M" + parentCenterX + " " + parentLineY + " V" + branchY;
+      if (children.length > 1) {
+        familyPath += " M" + minChildX + " " + branchY + " H" + maxChildX;
+      }
+      children.forEach(function childLine(child) {
+        familyPath += " M" + child.x + " " + branchY + " V" + (child.y - TREE_NODE_HALF_Y);
+      });
+      drawPath(familyPath, { from: parents[0].id, to: children[0].id }, pathPairs, false, "family");
     });
 
     directRelationships.forEach(function drawDirect(relationshipItem) {
@@ -973,14 +1016,15 @@
       var from = byId(relationshipItem.from);
       var to = byId(relationshipItem.to);
       if (!from || !to) return;
-      var fromX = from.x < to.x ? from.x + TREE_NODE_HALF : from.x - TREE_NODE_HALF;
-      var toX = from.x < to.x ? to.x - TREE_NODE_HALF : to.x + TREE_NODE_HALF;
+      var fromX = from.x < to.x ? from.x + TREE_NODE_HALF_X : from.x - TREE_NODE_HALF_X;
+      var toX = from.x < to.x ? to.x - TREE_NODE_HALF_X : to.x + TREE_NODE_HALF_X;
       var midX = Math.round((fromX + toX) / 2);
       drawPath("M" + fromX + " " + from.y + " H" + midX + " V" + to.y + " H" + toX, relationshipItem, pathPairs, false, "direct");
     });
   }
 
   function renderTimelineGuides(peopleToRender) {
+    if (!state.showDates) return;
     var axis = document.createElementNS("http://www.w3.org/2000/svg", "line");
     axis.setAttribute("x1", TIMELINE_AXIS_X);
     axis.setAttribute("x2", TIMELINE_AXIS_X);
@@ -993,7 +1037,7 @@
       var y = Math.round(timelineYForYear(year));
       var line = document.createElementNS("http://www.w3.org/2000/svg", "line");
       line.setAttribute("x1", TIMELINE_AXIS_X);
-      line.setAttribute("x2", 1510);
+      line.setAttribute("x2", TREE_WORLD_WIDTH - 120);
       line.setAttribute("y1", y);
       line.setAttribute("y2", y);
       line.setAttribute("class", "timeline-guide-line");
@@ -1015,35 +1059,7 @@
       els.relationshipLines.appendChild(label);
     });
 
-    peopleToRender.forEach(function drawPersonDate(person) {
-      var year = birthYearValue(person);
-      if (!year) return;
-      var y = person.y;
-      var endX = Math.max(TIMELINE_AXIS_X + 30, person.x - TREE_NODE_HALF - 8);
-      var gender = genderClass(person).replace("gender-", "");
-      var connector = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      connector.setAttribute("x1", TIMELINE_AXIS_X + 10);
-      connector.setAttribute("x2", endX);
-      connector.setAttribute("y1", y);
-      connector.setAttribute("y2", y);
-      connector.setAttribute("class", "timeline-person-line " + gender);
-      els.relationshipLines.appendChild(connector);
-
-      var dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      dot.setAttribute("cx", TIMELINE_AXIS_X);
-      dot.setAttribute("cy", y);
-      dot.setAttribute("r", 6);
-      dot.setAttribute("class", "timeline-person-dot " + gender);
-      els.relationshipLines.appendChild(dot);
-
-      var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      label.setAttribute("x", endX - 12);
-      label.setAttribute("y", y + 5);
-      label.setAttribute("text-anchor", "end");
-      label.setAttribute("class", "timeline-person-label " + gender);
-      label.textContent = year;
-      els.relationshipLines.appendChild(label);
-    });
+    void peopleToRender;
   }
 
   function drawPath(d, relationshipItem, pathPairs, isPartner, extraClass) {
@@ -1098,25 +1114,28 @@
     var relation = person.id === CURRENT_USER_ID
       ? { sentence: "This is you.", label: "You" }
       : window.RelationshipEngine.describeRelationship(person.id, CURRENT_USER_ID, people, activeRelationships());
+    var editActions = state.editMode ? [
+      "<div class=\"profile-actions\">",
+      "<button class=\"button primary\" type=\"button\" data-open-add-info data-tooltip=\"Add or change the basics: name, birth details, gender and photo.\">Fill in details</button>",
+      "<button class=\"button\" type=\"button\" data-open-relative data-tooltip=\"Add a parent, sibling, child, cousin, partner or another family member.\">Add relative</button>",
+      "<button class=\"button\" type=\"button\" data-open-relative data-default-connection=\"partner\" data-tooltip=\"Add this person's husband, wife or partner.\">Add partner</button>",
+      person.id !== CURRENT_USER_ID ? "<button class=\"button\" type=\"button\" data-soft-delete data-tooltip=\"Remove this profile from the tree. You can restore it later.\">Remove profile</button>" : "",
+      "</div>"
+    ].join("") : "";
 
     els.profilePanel.innerHTML = [
-      "<div class=\"profile-hero photo-drop-target " + genderClass(person) + (hasPersonPhoto(person) ? "" : " missing") + "\" data-photo-drop-person-id=\"" + escapeHTML(person.id) + "\">",
+      "<div class=\"profile-hero " + (state.editMode ? "photo-drop-target " : "") + genderClass(person) + (hasPersonPhoto(person) ? "" : " missing") + "\"" + (state.editMode ? " data-photo-drop-person-id=\"" + escapeHTML(person.id) + "\"" : "") + ">",
       profilePhotoMarkup(person),
       "<div class=\"profile-title\">",
       "<p>" + escapeHTML(person.roleHint || years(person) || relation.label) + "</p>",
       "<h2>" + escapeHTML(primaryName(person)) + "</h2>",
       "<p>" + escapeHTML(relation.sentence) + "</p>",
       "</div>",
-      "<span class=\"profile-photo-hint\">Drop photo</span>",
+      state.editMode ? "<span class=\"profile-photo-hint\">Drop photo</span>" : "",
       "</div>",
       "<div class=\"profile-body\">",
       profileNotice(person),
-      "<div class=\"profile-actions\">",
-      "<button class=\"button primary\" type=\"button\" data-open-add-info data-tooltip=\"Add or change the basics: name, birth details, gender and photo.\">Fill in details</button>",
-      "<button class=\"button\" type=\"button\" data-open-relative data-tooltip=\"Add a parent, sibling, child, cousin, partner or another family member.\">Add relative</button>",
-      "<button class=\"button\" type=\"button\" data-open-relative data-default-connection=\"partner\" data-tooltip=\"Add this person's husband, wife or partner.\">Add partner</button>",
-      person.id !== CURRENT_USER_ID ? "<button class=\"button\" type=\"button\" data-soft-delete data-tooltip=\"Remove this profile from the tree. You can restore it later.\">Remove profile</button>" : "",
-      "</div>",
+      editActions,
       namesSection(person),
       birthSection(person),
       familySection(person),
@@ -1154,6 +1173,7 @@
   }
 
   function profileNotice(person) {
+    if (!state.editMode) return "";
     if (person.id === CURRENT_USER_ID) {
       return "<div class=\"claim-box\"><strong>Your starting point</strong><span>Fill in your own name first, then work upward to parents and older relatives.</span></div>";
     }
@@ -1450,6 +1470,7 @@
   }
 
   function renderExplore() {
+    if (!els.exploreContent) return;
     els.exploreContent.innerHTML = [
       "<div class=\"start-steps\">",
       "<div><strong>1</strong><span>Tap You and add your real name.</span></div>",
@@ -1614,6 +1635,7 @@
     var person = byId(personId);
     if (!person) return;
     var rect = els.mapShell.getBoundingClientRect();
+    state.zoom = Math.max(state.zoom, rect.width < 740 ? 0.62 : 0.72);
     state.panX = rect.width / 2 - person.x * state.zoom;
     state.panY = rect.height / 2 - person.y * state.zoom;
     renderMap();
@@ -1623,12 +1645,12 @@
     var active = visiblePeople();
     if (!active.length) return;
     var rect = els.mapShell.getBoundingClientRect();
-    var leftReserve = rect.width < 740 ? 96 : 154;
-    var rightReserve = rect.width < 740 ? 22 : 42;
-    var topReserve = 58;
-    var bottomReserve = 58;
-    var nodePadX = rect.width < 740 ? 106 : 124;
-    var nodePadY = rect.width < 740 ? 90 : 98;
+    var leftReserve = rect.width < 740 ? 28 : 42;
+    var rightReserve = rect.width < 740 ? 28 : 42;
+    var topReserve = rect.width < 740 ? 42 : 52;
+    var bottomReserve = rect.width < 740 ? 42 : 52;
+    var nodePadX = TREE_NODE_HALF_X + 28;
+    var nodePadY = TREE_NODE_HALF_Y + 28;
     var minX = Math.min.apply(null, active.map(function min(person) { return person.x - nodePadX; }));
     var maxX = Math.max.apply(null, active.map(function max(person) { return person.x + nodePadX; }));
     var minY = Math.min.apply(null, active.map(function min(person) { return person.y - nodePadY; }));
@@ -1637,10 +1659,35 @@
     var worldHeight = Math.max(1, maxY - minY);
     var availableWidth = Math.max(240, rect.width - leftReserve - rightReserve);
     var availableHeight = Math.max(260, rect.height - topReserve - bottomReserve);
-    state.zoom = Math.max(0.58, Math.min(0.92, availableWidth / worldWidth, availableHeight / worldHeight));
+    state.zoom = Math.max(0.25, Math.min(1.1, availableWidth / worldWidth, availableHeight / worldHeight));
     state.panX = leftReserve + (availableWidth - worldWidth * state.zoom) / 2 - minX * state.zoom;
     state.panY = topReserve + (availableHeight - worldHeight * state.zoom) / 2 - minY * state.zoom;
     renderMap();
+  }
+
+  function clampPan() {
+    var active = visiblePeople();
+    if (!active.length) return;
+    var rect = els.mapShell.getBoundingClientRect();
+    var pad = rect.width < 740 ? 160 : 260;
+    var minX = Math.min.apply(null, active.map(function min(person) { return person.x - TREE_NODE_HALF_X; })) - pad;
+    var maxX = Math.max.apply(null, active.map(function max(person) { return person.x + TREE_NODE_HALF_X; })) + pad;
+    var minY = Math.min.apply(null, active.map(function min(person) { return person.y - TREE_NODE_HALF_Y; })) - pad;
+    var maxY = Math.max.apply(null, active.map(function max(person) { return person.y + TREE_NODE_HALF_Y; })) + pad;
+    var minPanX = rect.width - maxX * state.zoom;
+    var maxPanX = -minX * state.zoom;
+    var minPanY = rect.height - maxY * state.zoom;
+    var maxPanY = -minY * state.zoom;
+    if (minPanX > maxPanX) {
+      state.panX = (minPanX + maxPanX) / 2;
+    } else {
+      state.panX = Math.max(minPanX, Math.min(maxPanX, state.panX));
+    }
+    if (minPanY > maxPanY) {
+      state.panY = (minPanY + maxPanY) / 2;
+    } else {
+      state.panY = Math.max(minPanY, Math.min(maxPanY, state.panY));
+    }
   }
 
   function selectPerson(personId, shouldCenter) {
@@ -1668,7 +1715,7 @@
 
   function setZoom(nextZoom, originX, originY) {
     var previousZoom = state.zoom;
-    var bounded = Math.max(0.45, Math.min(1.6, nextZoom));
+    var bounded = Math.max(0.25, Math.min(1.8, nextZoom));
     if (bounded === previousZoom) return;
     var rect = els.mapShell.getBoundingClientRect();
     var pointX = originX == null ? rect.width / 2 : originX;
@@ -1678,6 +1725,7 @@
     state.zoom = bounded;
     state.panX = pointX - worldX * bounded;
     state.panY = pointY - worldY * bounded;
+    clampPan();
     renderMap();
   }
 
@@ -2156,11 +2204,14 @@
     var birthPlace = String(form.get("birthPlace") || "").trim();
     var gender = String(form.get("gender") || "unknown");
     var connection = String(form.get("connection") || "child");
+    var base = byId(state.selectedPersonId) || byId(CURRENT_USER_ID);
+    var coParentId = chooseCoParentForChild(base, connection);
+    if (coParentId === false) return;
+    if (!confirmSiblingParents(base, connection)) return;
     if (!firstName) return;
     els.relativeDialog.close();
 
     withUndo("Person added", function addPerson() {
-      var base = byId(state.selectedPersonId) || byId(CURRENT_USER_ID);
       var id = newId("person");
       people.push({
         id: id,
@@ -2182,7 +2233,12 @@
         roleHint: connectionLabel(connection),
         partnerPrompt: "Add husband, wife or partner"
       });
-      connectPeople(id, base.id, connection);
+      if (!connectPeople(id, base.id, connection, { coParentId: coParentId })) {
+        people = people.filter(function removeFailed(person) {
+          return person.id !== id;
+        });
+        return;
+      }
       addActivity(CURRENT_USER_ID, "added " + name);
       state.selectedPersonId = id;
     });
@@ -2194,31 +2250,83 @@
     if (!base || !byId(existingId)) return;
     els.relativeDialog.close();
     withUndo("Connected", function connectExisting() {
-      connectPeople(existingId, base.id, connection);
+      if (!connectPeople(existingId, base.id, connection, {})) return;
       addActivity(CURRENT_USER_ID, "connected " + personName(existingId) + " to " + primaryName(base));
       state.selectedPersonId = existingId;
     });
   }
 
-  function connectPeople(subjectId, baseId, connection) {
-    if (connection === "child") relationships.push(relationship(baseId, subjectId, "biological_parent"));
-    if (connection === "parent") relationships.push(relationship(subjectId, baseId, "biological_parent"));
-    if (connection === "partner") relationships.push(relationship(subjectId, baseId, "partner"));
-    if (connection === "cousin") relationships.push(relationship(subjectId, baseId, "direct_cousin"));
-    if (connection === "aunt_uncle") relationships.push(relationship(subjectId, baseId, "direct_aunt_uncle"));
-    if (connection === "grandparent") relationships.push(relationship(subjectId, baseId, "direct_grandparent"));
-    if (connection === "grandchild") relationships.push(relationship(subjectId, baseId, "direct_grandchild"));
-    if (connection === "family_link") relationships.push(relationship(subjectId, baseId, "direct_family_link"));
+  function chooseCoParentForChild(base, connection) {
+    if (!base || connection !== "child") return null;
+    var partners = (graph().partnersByPerson.get(base.id) || []).map(function toPerson(partnerRef) {
+      return byId(partnerRef.id);
+    }).filter(Boolean);
+    if (!partners.length) return null;
+    if (partners.length === 1) return partners[0].id;
+    var options = partners.map(function option(person, index) {
+      return (index + 1) + ". " + primaryName(person);
+    }).concat((partners.length + 1) + ". Unknown / other parent");
+    var answer = window.prompt("Child with which partner?\n" + options.join("\n"), "1");
+    if (answer == null) return false;
+    var choice = Number(answer);
+    if (!Number.isFinite(choice) || choice < 1 || choice > partners.length + 1) {
+      window.alert("Choose one of the listed numbers.");
+      return false;
+    }
+    return choice <= partners.length ? partners[choice - 1].id : null;
+  }
+
+  function confirmSiblingParents(base, connection) {
+    if (!base || connection !== "sibling") return true;
+    var parents = graph().parentsByChild.get(base.id) || [];
+    if (parents.length < 2) return true;
+    var names = parents.map(function toName(parentRef) {
+      return personName(parentRef.id);
+    }).join(" and ");
+    return window.confirm("Should this sibling share both known parents with " + primaryName(base) + "?\n\nKnown parents: " + names);
+  }
+
+  function connectPeople(subjectId, baseId, connection, options) {
+    var settings = options || {};
+    var planned = [];
+    if (connection === "child") {
+      planned.push({ from: baseId, to: subjectId, type: "biological_parent" });
+      if (settings.coParentId) planned.push({ from: settings.coParentId, to: subjectId, type: "biological_parent" });
+    }
+    if (connection === "parent") planned.push({ from: subjectId, to: baseId, type: "biological_parent" });
+    if (connection === "partner") planned.push({ from: subjectId, to: baseId, type: "partner" });
+    if (connection === "cousin") planned.push({ from: subjectId, to: baseId, type: "direct_cousin" });
+    if (connection === "aunt_uncle") planned.push({ from: subjectId, to: baseId, type: "direct_aunt_uncle" });
+    if (connection === "grandparent") planned.push({ from: subjectId, to: baseId, type: "direct_grandparent" });
+    if (connection === "grandchild") planned.push({ from: subjectId, to: baseId, type: "direct_grandchild" });
+    if (connection === "family_link") planned.push({ from: subjectId, to: baseId, type: "direct_family_link" });
     if (connection === "sibling") {
       var parents = graph().parentsByChild.get(baseId) || [];
       if (parents.length) {
         parents.forEach(function connectParent(parentRef) {
-          relationships.push(relationship(parentRef.id, subjectId, parentRef.type || "biological_parent"));
+          planned.push({ from: parentRef.id, to: subjectId, type: parentRef.type || "biological_parent" });
         });
       } else {
-        relationships.push(relationship(subjectId, baseId, "sibling"));
+        planned.push({ from: subjectId, to: baseId, type: "sibling" });
       }
     }
+    return pushRelationshipPlan(planned);
+  }
+
+  function pushRelationshipPlan(planned) {
+    var staged = relationships.slice();
+    for (var index = 0; index < planned.length; index += 1) {
+      var candidate = planned[index];
+      var validation = window.RelationshipEngine.validateRelationshipAddition(people, staged, candidate);
+      if (!validation.valid) {
+        window.alert(validation.message);
+        return false;
+      }
+      var item = relationship(candidate.from, candidate.to, candidate.type);
+      staged.push(item);
+      relationships.push(item);
+    }
+    return true;
   }
 
   function connectionLabel(connection) {
@@ -2239,6 +2347,15 @@
     if (person.gender === "male") return "gender-male";
     if (person.gender === "female") return "gender-female";
     return "gender-neutral";
+  }
+
+  function frameClass(person) {
+    var finishes = ["frame-walnut", "frame-oak", "frame-brass", "frame-ivory", "frame-charcoal"];
+    var text = String(person && person.id || "");
+    var score = text.split("").reduce(function sum(total, character) {
+      return total + character.charCodeAt(0);
+    }, 0);
+    return finishes[score % finishes.length];
   }
 
   function splitNameParts(name) {
@@ -2494,6 +2611,9 @@
   function startDemo() {
     if (els.privateGate) els.privateGate.hidden = true;
     els.approvedApp.hidden = false;
+    state.moreOpen = false;
+    state.editMode = false;
+    renderAll();
     demoIndex = 0;
     showDemoStep();
   }
@@ -2641,7 +2761,29 @@
     els.saveButton.addEventListener("click", saveNow);
     els.shareButton.addEventListener("click", shareCurrentView);
 
-    document.getElementById("youButton").addEventListener("click", function goYou() {
+    els.editModeButton.addEventListener("click", function toggleEditMode() {
+      endDemo();
+      state.editMode = !state.editMode;
+      renderAll();
+    });
+
+    els.moreButton.addEventListener("click", function toggleMore() {
+      state.moreOpen = !state.moreOpen;
+      renderAll();
+    });
+
+    els.fitTreeButton.addEventListener("click", function fitTree() {
+      fitFamilyOverview();
+    });
+
+    els.datesToggleButton.addEventListener("click", function toggleDates() {
+      state.showDates = !state.showDates;
+      persist();
+      renderMap();
+      renderAll();
+    });
+
+    document.getElementById("recenterButton").addEventListener("click", function goMe() {
       endDemo();
       state.selectedPersonId = CURRENT_USER_ID;
       state.collapsedBranches = false;
@@ -2652,6 +2794,8 @@
 
     document.getElementById("connectionsButton").addEventListener("click", function showConnections() {
       endDemo();
+      state.moreOpen = true;
+      if (els.lowerGrid) els.lowerGrid.hidden = false;
       els.connectionsPanel.classList.remove("connections-panel-collapsed");
       state.relationshipA = "sibling";
       state.relationshipB = CURRENT_USER_ID;
@@ -2662,6 +2806,7 @@
 
     document.getElementById("closeConnectionsButton").addEventListener("click", function closeConnections() {
       els.connectionsPanel.classList.add("connections-panel-collapsed");
+      if (els.lowerGrid && !state.moreOpen) els.lowerGrid.hidden = true;
       state.highlightPath = [];
       state.highlightPeople = new Set();
       renderMap();
@@ -2672,9 +2817,6 @@
     });
     document.getElementById("zoomOutButton").addEventListener("click", function zoomOut() {
       setZoom(state.zoom - 0.12);
-    });
-    document.getElementById("recenterButton").addEventListener("click", function recenter() {
-      centerOnPerson(state.selectedPersonId);
     });
     document.getElementById("branchButton").addEventListener("click", function addRelativeFromTree() {
       openRelativeDialog();
@@ -2781,6 +2923,11 @@
   }
 
   function handleDocumentClick(event) {
+    if (suppressNextPersonClick) {
+      suppressNextPersonClick = false;
+      event.preventDefault();
+      return;
+    }
     var personButton = event.target.closest("[data-person-id]");
     if (personButton) {
       selectPerson(personButton.dataset.personId, true);
@@ -2862,7 +3009,8 @@
         startX: event.clientX,
         startY: event.clientY,
         panX: state.panX,
-        panY: state.panY
+        panY: state.panY,
+        moved: false
       };
       els.mapShell.classList.add("is-dragging");
       els.mapShell.setPointerCapture(event.pointerId);
@@ -2872,19 +3020,35 @@
       if (!drag) return;
       state.panX = drag.panX + event.clientX - drag.startX;
       state.panY = drag.panY + event.clientY - drag.startY;
+      drag.moved = drag.moved || Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) > 8;
+      clampPan();
       renderMap();
     });
 
     els.mapShell.addEventListener("pointerup", function endDrag() {
+      if (drag && drag.moved) {
+        suppressNextPersonClick = true;
+        window.setTimeout(function clearSuppression() {
+          suppressNextPersonClick = false;
+        }, 0);
+      }
       drag = null;
       els.mapShell.classList.remove("is-dragging");
     });
 
-    els.mapShell.addEventListener("wheel", function wheelZoom(event) {
+    els.mapShell.addEventListener("wheel", function wheelPan(event) {
       event.preventDefault();
-      var rect = els.mapShell.getBoundingClientRect();
-      var direction = event.deltaY > 0 ? -0.08 : 0.08;
-      setZoom(state.zoom + direction, event.clientX - rect.left, event.clientY - rect.top);
+      var maxDelta = 90;
+      var deltaX = Math.max(-maxDelta, Math.min(maxDelta, event.deltaX || 0));
+      var deltaY = Math.max(-maxDelta, Math.min(maxDelta, event.deltaY || 0));
+      if (event.shiftKey && !deltaX) {
+        state.panX -= deltaY;
+      } else {
+        state.panX -= deltaX;
+        state.panY -= deltaY;
+      }
+      clampPan();
+      renderMap();
     }, { passive: false });
   }
 

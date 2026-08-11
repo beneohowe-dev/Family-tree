@@ -2,7 +2,9 @@ const assert = require("node:assert/strict");
 const {
   describeRelationship,
   shortestPath,
-  createGraph
+  createGraph,
+  layoutFamilyTree,
+  validateRelationshipAddition
 } = require("../relationship-engine");
 
 const people = [
@@ -107,6 +109,108 @@ test("direct family roles are described from recorded labels", () => {
   assert.equal(result.sentence, "Alex Stone is Ben Howe's cousin.");
   assert.equal(result.confidence, "recorded");
   assert.deepEqual(result.path, ["alex", "ben"]);
+});
+
+test("layout keeps generations separate regardless of birth year", () => {
+  const samplePeople = [
+    { id: "parent", name: "Young Parent", birthYear: 1995 },
+    { id: "child", name: "Older Child", birthYear: 1983 }
+  ];
+  const sampleRelationships = [rel("parent", "child", "biological_parent")];
+  const layout = layoutFamilyTree(samplePeople, sampleRelationships, {
+    rootId: "child",
+    nodeWidth: 168,
+    nodeHeight: 248,
+    originX: 1000,
+    originY: 1000,
+    rowGap: 330
+  });
+  assert.equal(layout.generations.get("parent"), -1);
+  assert.equal(layout.generations.get("child"), 0);
+  assert.ok(layout.positions.get("parent").y < layout.positions.get("child").y);
+});
+
+test("layout reserves enough horizontal space for siblings", () => {
+  const siblingPeople = [
+    { id: "p1", name: "Parent One" },
+    { id: "p2", name: "Parent Two" },
+    { id: "c1", name: "Child One", birthYear: 1980 },
+    { id: "c2", name: "Child Two", birthYear: 1981 },
+    { id: "c3", name: "Child Three", birthYear: 1982 },
+    { id: "c4", name: "Child Four", birthYear: 1983 }
+  ];
+  const siblingRelationships = [
+    rel("p1", "p2", "partner"),
+    rel("p1", "c1", "biological_parent"),
+    rel("p2", "c1", "biological_parent"),
+    rel("p1", "c2", "biological_parent"),
+    rel("p2", "c2", "biological_parent"),
+    rel("p1", "c3", "biological_parent"),
+    rel("p2", "c3", "biological_parent"),
+    rel("p1", "c4", "biological_parent"),
+    rel("p2", "c4", "biological_parent")
+  ];
+  const layout = layoutFamilyTree(siblingPeople, siblingRelationships, { rootId: "c1", nodeWidth: 168, nodeHeight: 248 });
+  const childXs = ["c1", "c2", "c3", "c4"].map((id) => layout.positions.get(id).x).sort((a, b) => a - b);
+  for (let index = 1; index < childXs.length; index += 1) {
+    assert.ok(childXs[index] - childXs[index - 1] >= 168);
+  }
+});
+
+test("layout handles remarriage children in the child generation", () => {
+  const remarriagePeople = [
+    { id: "john", name: "John" },
+    { id: "sarah", name: "Sarah" },
+    { id: "emma", name: "Emma" },
+    { id: "peter", name: "Peter" },
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+    { id: "c", name: "C" },
+    { id: "d", name: "D" },
+    { id: "e", name: "E" }
+  ];
+  const remarriageRelationships = [
+    rel("john", "sarah", "former_spouse"),
+    rel("john", "emma", "spouse"),
+    rel("sarah", "peter", "spouse"),
+    rel("john", "a", "biological_parent"),
+    rel("sarah", "a", "biological_parent"),
+    rel("john", "b", "biological_parent"),
+    rel("sarah", "b", "biological_parent"),
+    rel("john", "c", "biological_parent"),
+    rel("emma", "c", "biological_parent"),
+    rel("sarah", "d", "biological_parent"),
+    rel("peter", "d", "biological_parent"),
+    rel("sarah", "e", "biological_parent"),
+    rel("peter", "e", "biological_parent")
+  ];
+  const layout = layoutFamilyTree(remarriagePeople, remarriageRelationships, { rootId: "a", nodeWidth: 168, nodeHeight: 248 });
+  ["a", "b", "c", "d", "e"].forEach((id) => {
+    assert.equal(layout.generations.get(id), 0);
+  });
+  assert.ok(layout.familyGroups.length >= 3);
+});
+
+test("relationship validation blocks circular parentage and duplicates", () => {
+  const validationPeople = [
+    { id: "a", name: "A" },
+    { id: "b", name: "B" },
+    { id: "c", name: "C" }
+  ];
+  const validationRelationships = [
+    rel("a", "b", "biological_parent"),
+    rel("b", "c", "biological_parent")
+  ];
+  assert.equal(validateRelationshipAddition(validationPeople, validationRelationships, {
+    from: "c",
+    to: "a",
+    type: "biological_parent"
+  }).valid, false);
+  assert.equal(validateRelationshipAddition(validationPeople, validationRelationships, {
+    from: "a",
+    to: "b",
+    type: "biological_parent"
+  }).valid, false);
 });
 
 test("shortest path still exposes ambiguous graph connectivity", () => {
