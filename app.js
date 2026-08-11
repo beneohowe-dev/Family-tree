@@ -3,12 +3,15 @@
 
   var CURRENT_USER_ID = "you";
   var CURRENT_USER_NAME = "You";
-  var STORAGE_KEY = "private-family-network-prototype-v9";
+  var STORAGE_KEY = "private-family-network-prototype-v10";
 
   var people = [
     {
       id: "parent-1",
       name: "Parent",
+      firstName: "Parent",
+      middleNames: "",
+      lastName: "",
       birthYear: null,
       deathYear: null,
       gender: "male",
@@ -23,6 +26,9 @@
     {
       id: "parent-2",
       name: "Parent",
+      firstName: "Parent",
+      middleNames: "",
+      lastName: "",
       birthYear: null,
       deathYear: null,
       gender: "female",
@@ -37,6 +43,9 @@
     {
       id: "you",
       name: "You",
+      firstName: "You",
+      middleNames: "",
+      lastName: "",
       birthYear: null,
       deathYear: null,
       gender: "unknown",
@@ -50,6 +59,9 @@
     {
       id: "sibling",
       name: "Sibling",
+      firstName: "Sibling",
+      middleNames: "",
+      lastName: "",
       birthYear: null,
       deathYear: null,
       gender: "unknown",
@@ -107,7 +119,7 @@
     highlightPeople: new Set(),
     pendingSuggestFieldId: null,
     theme: "gallery",
-    accent: "#8c8798"
+    accent: "#70717c"
   };
 
   var lastUndo = null;
@@ -376,9 +388,35 @@
     return "d. " + person.deathYear;
   }
 
+  function primaryName(person) {
+    if (!person) return "Unknown person";
+    var first = String(person.firstName || "").trim();
+    var last = String(person.lastName || "").trim();
+    var primary = [first, last].filter(Boolean).join(" ").trim();
+    return primary || person.name || "Unknown person";
+  }
+
+  function fullName(person) {
+    if (!person) return "Unknown person";
+    var first = String(person.firstName || "").trim();
+    var middle = String(person.middleNames || "").trim();
+    var last = String(person.lastName || "").trim();
+    var full = [first, middle, last].filter(Boolean).join(" ").trim();
+    return full || primaryName(person);
+  }
+
+  function seedNameParts(person) {
+    if (!person || person.firstName || person.lastName || person.middleNames || !person.name) return;
+    var parts = person.name.split(/\s+/).filter(Boolean);
+    if (!parts.length) return;
+    person.firstName = parts[0] || "";
+    person.lastName = parts.length > 1 ? parts[parts.length - 1] : "";
+    person.middleNames = parts.length > 2 ? parts.slice(1, -1).join(" ") : "";
+  }
+
   function personName(id) {
     var person = byId(id);
-    return person ? person.name : "Unknown person";
+    return person ? primaryName(person) : "Unknown person";
   }
 
   function possessive(name) {
@@ -501,6 +539,7 @@
     renderExplore();
     renderHistory();
     renderAccessRequests();
+    applyNativeTooltips(document);
   }
 
   function renderSelectors() {
@@ -509,7 +548,7 @@
     });
     var options = active
       .map(function option(person) {
-        return "<option value=\"" + escapeHTML(person.id) + "\">" + escapeHTML(person.name) + "</option>";
+        return "<option value=\"" + escapeHTML(person.id) + "\">" + escapeHTML(primaryName(person)) + "</option>";
       })
       .join("");
     els.personASelect.innerHTML = options;
@@ -538,10 +577,10 @@
       return [
         "<button type=\"button\" class=\"" + classes.join(" ") + "\"",
         " data-person-id=\"" + escapeHTML(person.id) + "\"",
-        " aria-label=\"Open " + escapeHTML(person.name) + "\"",
+        " aria-label=\"Open " + escapeHTML(primaryName(person)) + "\"",
         " style=\"left:" + person.x + "px;top:" + person.y + "px\">",
         portraitMarkup(person),
-        "<span class=\"node-name\">" + escapeHTML(person.name) + "</span>",
+        "<span class=\"node-name\">" + escapeHTML(primaryName(person)) + "</span>",
         "<span class=\"node-years\">" + escapeHTML(person.roleHint || years(person) || "Tap to fill in") + "</span>",
         person.partnerPrompt ? "<span class=\"node-suggestion\">" + escapeHTML(person.partnerPrompt) + "</span>" : "",
         person.id === CURRENT_USER_ID ? "<span class=\"node-tag\">You</span>" : "",
@@ -647,7 +686,7 @@
         : "<div class=\"profile-photo\" style=\"background-position:" + photoPosition(person) + "\"></div>",
       "<div class=\"profile-title\">",
       "<p>" + escapeHTML(person.roleHint || years(person) || relation.label) + "</p>",
-      "<h2>" + escapeHTML(person.name) + "</h2>",
+      "<h2>" + escapeHTML(primaryName(person)) + "</h2>",
       "<p>" + escapeHTML(relation.sentence) + "</p>",
       "</div>",
       "</div>",
@@ -661,6 +700,7 @@
       person.claimedBy ? "" : "<button class=\"button\" type=\"button\" data-claim-profile data-tooltip=\"Request to link your account to this existing person record.\">This is me</button>",
       person.id !== CURRENT_USER_ID ? "<button class=\"button\" type=\"button\" data-soft-delete data-tooltip=\"Soft remove this profile so an admin can restore it later.\">Remove profile</button>" : "",
       "</div>",
+      namesSection(person),
       familySection(person),
       fieldsSection(person),
       memoriesSection(person),
@@ -700,6 +740,35 @@
         "</div>"
       ].join("");
     }).join("");
+  }
+
+  function namesSection(person) {
+    var middle = String(person.middleNames || "").trim();
+    var full = fullName(person);
+    if (!middle && full === primaryName(person)) return "";
+    return [
+      "<section class=\"section-block names-section\">",
+      "<h3>Names</h3>",
+      "<div class=\"field-list\">",
+      middle ? [
+        "<article class=\"field-row name-field-row\">",
+        "<div>",
+        "<strong>Middle names</strong>",
+        "<p>" + escapeHTML(middle) + "</p>",
+        "</div>",
+        "</article>"
+      ].join("") : "",
+      full !== primaryName(person) ? [
+        "<article class=\"field-row name-field-row\">",
+        "<div>",
+        "<strong>Full name</strong>",
+        "<p>" + escapeHTML(full) + "</p>",
+        "</div>",
+        "</article>"
+      ].join("") : "",
+      "</div>",
+      "</section>"
+    ].join("");
   }
 
   function fieldsSection(person) {
@@ -803,7 +872,7 @@
     return [
       "<button type=\"button\" class=\"mini-person\" data-person-id=\"" + escapeHTML(person.id) + "\">",
       portraitMarkup(person, "small"),
-      "<span>" + escapeHTML(person.name) + "</span>",
+      "<span>" + escapeHTML(primaryName(person)) + "</span>",
       "</button>"
     ].join("");
   }
@@ -825,7 +894,7 @@
     var items = captions.slice(0, person.id === CURRENT_USER_ID ? 3 : 2).map(function render(caption, index) {
       return [
         "<article class=\"memory-card\">",
-        "<img src=\"assets/family-gallery.png\" alt=\"" + escapeHTML(caption + " for " + person.name) + "\">",
+        "<img src=\"assets/family-gallery.png\" alt=\"" + escapeHTML(caption + " for " + primaryName(person)) + "\">",
         "<p>" + escapeHTML(caption) + "</p>",
         "</article>"
       ].join("");
@@ -971,7 +1040,7 @@
 
     var results = people.filter(function match(person) {
       if (person.status === "deleted") return false;
-      if (person.name.toLowerCase().includes(value)) return true;
+      if (fullName(person).toLowerCase().includes(value) || primaryName(person).toLowerCase().includes(value)) return true;
       return profileFields.some(function matchField(fieldItem) {
         return fieldItem.personId === person.id &&
           canSearchField(fieldItem) &&
@@ -985,7 +1054,7 @@
       return [
         "<button class=\"search-result\" type=\"button\" data-person-id=\"" + escapeHTML(person.id) + "\">",
         portraitMarkup(person, "small"),
-        "<span><strong>" + escapeHTML(person.name) + "</strong><span>" + escapeHTML(context) + "</span></span>",
+        "<span><strong>" + escapeHTML(primaryName(person)) + "</strong><span>" + escapeHTML(context) + "</span></span>",
         "</button>"
       ].join("");
     }).join("") : "<p class=\"muted\">No visible matches.</p>";
@@ -998,6 +1067,7 @@
         fieldItem.value.toLowerCase().includes(query);
     });
     if (match) return match.label + ": " + match.value;
+    if (String(person.middleNames || "").trim()) return "Middle names: " + person.middleNames;
     return years(person) || "Family member";
   }
 
@@ -1073,6 +1143,7 @@
   }
 
   function openAddInfoDialog() {
+    var person = byId(state.selectedPersonId);
     var categorySelect = els.addInfoForm.elements.category;
     categorySelect.innerHTML = promptCategories.map(function option(item) {
       return "<option value=\"" + escapeHTML(item[0]) + "\">" + escapeHTML(item[0]) + "</option>";
@@ -1081,6 +1152,14 @@
       return "<button type=\"button\" data-prompt-category=\"" + escapeHTML(item[0]) + "\" data-prompt-label=\"" + escapeHTML(item[1]) + "\">" + escapeHTML(item[1]) + "</button>";
     }).join("");
     els.addInfoForm.reset();
+    if (person) {
+      seedNameParts(person);
+      els.addInfoForm.elements.firstName.value = person.firstName || "";
+      els.addInfoForm.elements.middleNames.value = person.middleNames || "";
+      els.addInfoForm.elements.lastName.value = person.lastName || "";
+      els.addInfoForm.elements.birthYear.value = person.birthYear || "";
+      els.addInfoForm.elements.gender.value = person.gender || "unknown";
+    }
     els.addInfoDialog.showModal();
   }
 
@@ -1092,14 +1171,40 @@
     }
     var form = new FormData(els.addInfoForm);
     var person = byId(state.selectedPersonId);
+    var firstName = String(form.get("firstName") || "").trim();
+    var middleNames = String(form.get("middleNames") || "").trim();
+    var lastName = String(form.get("lastName") || "").trim();
+    var birthYear = Number(form.get("birthYear")) || null;
+    var gender = String(form.get("gender") || "unknown");
     var label = String(form.get("label") || "").trim();
     var value = String(form.get("value") || "").trim();
     var category = normalCategory(String(form.get("category") || "Additional"));
     var visibility = String(form.get("visibility") || "family");
-    if (!person || !label || !value) return;
+    var hasBasics = person && Boolean(
+      firstName !== String(person.firstName || "").trim() ||
+      middleNames !== String(person.middleNames || "").trim() ||
+      lastName !== String(person.lastName || "").trim() ||
+      birthYear !== (person.birthYear || null) ||
+      gender !== (person.gender || "unknown")
+    );
+    var hasDetail = Boolean(label && value);
+    if (!person || (!hasBasics && !hasDetail)) return;
     els.addInfoDialog.close();
 
     withUndo("Saved", function addInfo() {
+      if (hasBasics) {
+        person.firstName = firstName;
+        person.middleNames = middleNames;
+        person.lastName = lastName;
+        person.birthYear = birthYear;
+        person.gender = gender;
+        person.name = primaryName(person);
+        if (firstName || lastName) person.placeholder = false;
+        addActivity(CURRENT_USER_ID, "updated basics for " + primaryName(person));
+      }
+
+      if (!hasDetail) return;
+
       if (person.claimedBy && person.claimedBy !== CURRENT_USER_ID && isLiving(person)) {
         suggestions.push({
           id: newId("suggestion"),
@@ -1114,7 +1219,7 @@
           visibility: visibility,
           category: category
         });
-        addActivity(CURRENT_USER_ID, "suggested new information for " + person.name);
+        addActivity(CURRENT_USER_ID, "suggested new information for " + primaryName(person));
         return;
       }
 
@@ -1139,7 +1244,7 @@
           next: value
         }]
       });
-      addActivity(CURRENT_USER_ID, "added " + label.toLowerCase() + " for " + person.name);
+      addActivity(CURRENT_USER_ID, "added " + label.toLowerCase() + " for " + primaryName(person));
     });
   }
 
@@ -1298,7 +1403,7 @@
   function softDeleteSelectedPerson() {
     var person = byId(state.selectedPersonId);
     if (!person || person.id === CURRENT_USER_ID) return;
-    var confirmed = window.confirm("Remove " + person.name + " from the visible family tree?");
+    var confirmed = window.confirm("Remove " + primaryName(person) + " from the visible family tree?");
     if (!confirmed) return;
     withUndo("Removed", function removePerson() {
       person.status = "deleted";
@@ -1307,13 +1412,13 @@
         id: newId("delete"),
         entityType: "person",
         entityId: person.id,
-        entityName: person.name,
+        entityName: primaryName(person),
         actorId: CURRENT_USER_ID,
         deletedAt: readableNow(),
         previousState: JSON.parse(JSON.stringify(person))
       });
       state.selectedPersonId = CURRENT_USER_ID;
-      addActivity(CURRENT_USER_ID, "removed " + person.name);
+      addActivity(CURRENT_USER_ID, "removed " + primaryName(person));
     });
   }
 
@@ -1369,9 +1474,13 @@
     withUndo("Person added", function addPerson() {
       var base = byId(state.selectedPersonId) || byId(CURRENT_USER_ID);
       var id = newId("person");
+      var nameParts = splitNameParts(name);
       people.push({
         id: id,
-        name: name,
+        name: [nameParts.firstName, nameParts.lastName].filter(Boolean).join(" ") || name,
+        firstName: nameParts.firstName,
+        middleNames: nameParts.middleNames,
+        lastName: nameParts.lastName,
         birthYear: birthYear,
         deathYear: null,
         gender: gender,
@@ -1396,7 +1505,7 @@
     els.relativeDialog.close();
     withUndo("Connected", function connectExisting() {
       connectPeople(existingId, base.id, connection);
-      addActivity(CURRENT_USER_ID, "connected " + personName(existingId) + " to " + base.name);
+      addActivity(CURRENT_USER_ID, "connected " + personName(existingId) + " to " + primaryName(base));
       state.selectedPersonId = existingId;
     });
   }
@@ -1432,6 +1541,15 @@
     return "gender-neutral";
   }
 
+  function splitNameParts(name) {
+    var parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    return {
+      firstName: parts[0] || "",
+      middleNames: parts.length > 2 ? parts.slice(1, -1).join(" ") : "",
+      lastName: parts.length > 1 ? parts[parts.length - 1] : ""
+    };
+  }
+
   function renderDuplicateMatches() {
     var form = new FormData(els.relativeForm);
     var name = String(form.get("name") || "").trim();
@@ -1448,7 +1566,7 @@
       matches.map(function renderMatch(match) {
         return [
           "<article class=\"duplicate-card\">",
-          "<div><strong>" + escapeHTML(match.person.name) + "</strong><p class=\"muted\">" + escapeHTML(years(match.person)) + "</p></div>",
+          "<div><strong>" + escapeHTML(primaryName(match.person)) + "</strong><p class=\"muted\">" + escapeHTML(years(match.person)) + "</p></div>",
           "<div class=\"card-actions\">",
           "<button class=\"button compact\" type=\"button\" data-view-duplicate=\"" + escapeHTML(match.person.id) + "\">View profile</button>",
           "<button class=\"button compact primary\" type=\"button\" data-connect-duplicate=\"" + escapeHTML(match.person.id) + "\">Connect existing</button>",
@@ -1465,7 +1583,7 @@
     var parts = normalized.split(" ").filter(Boolean);
     return people.filter(function match(person) {
       if (person.status === "deleted") return false;
-      var personNameValue = normalizeName(person.name);
+      var personNameValue = normalizeName(fullName(person));
       var personParts = personNameValue.split(" ").filter(Boolean);
       var exact = personNameValue === normalized;
       var sharedParts = parts.filter(function count(part) {
@@ -1495,7 +1613,7 @@
         status: "pending",
         createdAt: readableNow()
       });
-      addActivity(CURRENT_USER_ID, "requested to claim " + person.name);
+      addActivity(CURRENT_USER_ID, "requested to claim " + primaryName(person));
     });
   }
 
@@ -1683,12 +1801,16 @@
     els.tooltipBubble.hidden = true;
   }
 
-  function bindTooltips() {
-    document.querySelectorAll("[data-tooltip]").forEach(function addNativeTooltip(element) {
+  function applyNativeTooltips(root) {
+    root.querySelectorAll("[data-tooltip]").forEach(function addNativeTooltip(element) {
       if (!element.getAttribute("title")) {
         element.setAttribute("title", element.getAttribute("data-tooltip"));
       }
     });
+  }
+
+  function bindTooltips() {
+    applyNativeTooltips(document);
     document.addEventListener("pointerover", function showPointerTooltip(event) {
       var target = event.target.closest("[data-tooltip]");
       if (!target) return;

@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f5f4f0">
+    <meta name="theme-color" content="#f7f8fc">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=20">
+    <link rel="stylesheet" href="styles.css?v=22">
   </head>
   <body data-theme="gallery">
     <a class="skip-link" href="#main">Skip to family tree</a>
@@ -13,7 +13,7 @@
     <div class="app-frame" id="approvedApp">
       <header class="topbar" aria-label="Family space navigation">
         <div class="brand">
-          <span class="family-mark" aria-hidden="true">F</span>
+          <span class="family-mark" aria-hidden="true">FT</span>
           <div>
             <p class="eyebrow">Private family tree</p>
             <h1>Family Tree</h1>
@@ -107,18 +107,18 @@
               <h2>Simple first steps</h2>
             </div>
             <select id="themeSelect" aria-label="Family theme">
-              <option value="gallery">Chalk</option>
+              <option value="gallery">Pearl</option>
               <option value="heritage">Blush</option>
-              <option value="dark">Night</option>
+              <option value="dark">Graphite</option>
               <option value="colour">Mint</option>
-              <option value="minimal">Whiteout</option>
+              <option value="minimal">Studio</option>
             </select>
           </div>
           <div class="accent-row" aria-label="Accent colour">
-            <button class="swatch teal" data-accent="#8c8798" type="button" aria-label="Chalk accent"></button>
-            <button class="swatch berry" data-accent="#ff8ac5" type="button" aria-label="Pink accent"></button>
-            <button class="swatch moss" data-accent="#97c9b4" type="button" aria-label="Mint accent"></button>
-            <button class="swatch gold" data-accent="#20222a" type="button" aria-label="Ink accent"></button>
+            <button class="swatch teal" data-accent="#70717c" type="button" aria-label="Pearl accent"></button>
+            <button class="swatch berry" data-accent="#c77aa0" type="button" aria-label="Blush accent"></button>
+            <button class="swatch moss" data-accent="#75a993" type="button" aria-label="Mint accent"></button>
+            <button class="swatch gold" data-accent="#111318" type="button" aria-label="Graphite accent"></button>
           </div>
           <div id="exploreContent" class="explore-content"></div>
         </article>
@@ -139,7 +139,7 @@
 
     <section class="private-gate" id="privateGate" hidden>
       <div class="private-gate-inner">
-        <span class="family-mark large" aria-hidden="true">F</span>
+        <span class="family-mark large" aria-hidden="true">FT</span>
         <p class="eyebrow">Private family tree</p>
         <h1>Family Tree</h1>
         <p class="gate-copy">This is the locked view people see before approval. It shares no family names, profiles, photos or relationships.</p>
@@ -184,9 +184,36 @@
     <dialog id="addInfoDialog" class="modal">
       <form method="dialog" id="addInfoForm">
         <div class="modal-head">
-          <h2>Add something</h2>
+          <h2>Fill in details</h2>
           <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
         </div>
+        <div class="profile-basics-grid">
+          <label>
+            First name
+            <input name="firstName" autocomplete="given-name" placeholder="First name">
+          </label>
+          <label>
+            Last name
+            <input name="lastName" autocomplete="family-name" placeholder="Last name">
+          </label>
+          <label class="wide-field">
+            Middle names
+            <input name="middleNames" autocomplete="additional-name" placeholder="Middle names, if known">
+          </label>
+          <label>
+            Birth year
+            <input name="birthYear" inputmode="numeric" pattern="[0-9]{4}" placeholder="Optional">
+          </label>
+          <label>
+            Gender
+            <select name="gender">
+              <option value="unknown">Not sure yet</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </label>
+        </div>
+        <p class="form-section-label">Optional extra detail</p>
         <div class="prompt-grid" id="promptGrid"></div>
         <label>
           Type
@@ -194,11 +221,11 @@
         </label>
         <label>
           Label
-          <input name="label" placeholder="Occupation, instrument, story" required>
+          <input name="label" placeholder="Occupation, place, story">
         </label>
         <label>
           Detail
-          <textarea name="value" rows="4" required></textarea>
+          <textarea name="value" rows="4" placeholder="Add one extra thing if you want"></textarea>
         </label>
         <label>
           Visibility
@@ -306,6 +333,6 @@
     </dialog>
 
     <script src="relationship-engine.js?v=2"></script>
-    <script src="app.js?v=20"></script>
+    <script src="app.js?v=22"></script>
   </body>
 </html>
