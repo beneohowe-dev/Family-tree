@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f7f8fc">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=33">
+    <link rel="stylesheet" href="styles.css?v=35">
   </head>
   <body data-theme="gallery">
     <a class="skip-link" href="#main">Skip to family tree</a>
@@ -45,7 +45,7 @@
               <button class="button compact" id="fitTreeButton" type="button" data-tooltip="Show the complete visible family tree.">Fit tree</button>
               <button class="button compact" id="recenterButton" type="button" aria-label="Centre on me" data-tooltip="Bring your profile back to the middle.">Me</button>
               <button class="button compact" id="datesToggleButton" type="button" aria-pressed="false" data-tooltip="Show or hide a subtle date guide behind the tree.">Dates</button>
-              <button class="button compact edit-only" id="branchButton" type="button" data-tooltip="Add another parent, sibling, partner or child.">Add relative</button>
+            <button class="button compact edit-only" id="branchButton" type="button" data-tooltip="Add another parent, sibling, cousin, partner or child.">Add relative</button>
             </div>
           </div>
 
@@ -68,10 +68,11 @@
           <div class="panel-head">
             <div>
               <p class="eyebrow">Connections</p>
-              <h2>How related?</h2>
+              <h2>Pick two people</h2>
             </div>
             <button class="icon-button" id="closeConnectionsButton" type="button" aria-label="Close relationship explorer" title="Close">x</button>
           </div>
+          <p class="panel-intro">Choose two people here, or click two frames on the wall. The family line and relationship will appear on the tree.</p>
           <div class="connection-picker">
             <label>
               Person A
@@ -96,22 +97,6 @@
             <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
             <button class="button" id="saveButton" type="button" data-tooltip="Save now. The tree also saves automatically each day on this device.">Save</button>
             <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a link to this family tree view.">Share link</button>
-          </div>
-          <label>
-            Wall style
-            <select id="themeSelect" aria-label="Wall style">
-              <option value="gallery">Ivory linen</option>
-              <option value="heritage">Sage heritage</option>
-              <option value="colour">Botanical cream</option>
-              <option value="minimal">Warm taupe</option>
-              <option value="dark">Dark library</option>
-            </select>
-          </label>
-          <div class="accent-row" aria-label="Accent colour">
-            <button class="swatch teal" data-accent="#70717c" type="button" aria-label="Pearl accent"></button>
-            <button class="swatch berry" data-accent="#c77aa0" type="button" aria-label="Blush accent"></button>
-            <button class="swatch moss" data-accent="#75a993" type="button" aria-label="Mint accent"></button>
-            <button class="swatch gold" data-accent="#111318" type="button" aria-label="Graphite accent"></button>
           </div>
         </article>
 
@@ -272,6 +257,18 @@
               <option value="family_link">Other family</option>
             </select>
           </label>
+          <fieldset class="relationship-choice wide-field" id="siblingParentChoice" hidden>
+            <legend>Do they share the same parents?</legend>
+            <label>
+              <input type="radio" name="siblingParents" value="shared" checked>
+              <span>Yes, same known parents</span>
+            </label>
+            <label>
+              <input type="radio" name="siblingParents" value="separate">
+              <span>No, different or unknown parents</span>
+            </label>
+            <p id="siblingParentHint">Known parents will be copied for this sibling.</p>
+          </fieldset>
         </div>
         <div id="duplicateResults" class="duplicate-results" hidden></div>
         <div class="form-actions">
@@ -282,6 +279,6 @@
     </dialog>
 
     <script src="relationship-engine.js?v=4"></script>
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=33"></script>
   </body>
 </html>

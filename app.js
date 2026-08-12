@@ -121,6 +121,9 @@
     highlightPeople: new Set(),
     pendingSuggestFieldId: null,
     editMode: false,
+    relationshipMode: false,
+    relationshipResult: null,
+    relationshipPickSlot: "a",
     showDates: false,
     moreOpen: false,
     theme: "gallery",
@@ -181,6 +184,8 @@
     relativeForm: document.getElementById("relativeForm"),
     duplicateResults: document.getElementById("duplicateResults"),
     relativeConnectionLabel: document.getElementById("relativeConnectionLabel"),
+    siblingParentChoice: document.getElementById("siblingParentChoice"),
+    siblingParentHint: document.getElementById("siblingParentHint"),
     accessDialog: document.getElementById("accessDialog"),
     accessRequests: document.getElementById("accessRequests"),
     inviteForm: document.getElementById("inviteForm"),
@@ -724,6 +729,9 @@
     state.selectedPersonId = data.selectedPersonId || CURRENT_USER_ID;
     state.highlightPath = [];
     state.highlightPeople = new Set();
+    state.relationshipMode = false;
+    state.relationshipResult = null;
+    state.relationshipPickSlot = "a";
     persist();
     renderAll();
   }
@@ -812,13 +820,14 @@
   function applyTheme() {
     document.body.dataset.theme = state.theme;
     document.documentElement.style.setProperty("--accent", state.accent);
-    els.themeSelect.value = state.theme;
+    if (els.themeSelect) els.themeSelect.value = state.theme;
   }
 
   function renderAll() {
     applyTheme();
     document.body.classList.toggle("is-editing-tree", state.editMode);
     document.body.classList.toggle("is-more-open", state.moreOpen);
+    document.body.classList.toggle("is-relationship-mode", state.relationshipMode);
     if (els.lowerGrid) {
       els.lowerGrid.hidden = !state.moreOpen && els.connectionsPanel.classList.contains("connections-panel-collapsed");
     }
@@ -831,9 +840,9 @@
       els.datesToggleButton.classList.toggle("active", state.showDates);
     }
     renderSelectors();
+    renderRelationshipExplorer();
     renderMap();
     renderProfile();
-    renderRelationshipExplorer();
     renderExplore();
     renderHistory();
     renderAccessRequests();
@@ -874,6 +883,7 @@
       classes.push(frameClass(person));
       if (person.id === state.selectedPersonId) classes.push("selected");
       if (person.id === CURRENT_USER_ID) classes.push("you");
+      if (state.relationshipMode && state.highlightPeople.size && !state.highlightPeople.has(person.id)) classes.push("relationship-muted");
       if (state.highlightPeople.has(person.id)) classes.push("highlight");
       return [
         "<button type=\"button\" class=\"" + classes.join(" ") + "\"",
@@ -888,17 +898,35 @@
         "</button>"
       ].join("");
     }).join("");
-    els.nodeLayer.innerHTML = nodeHtml + renderEditHandles();
+    els.nodeLayer.innerHTML = nodeHtml + renderEditHandles() + renderRelationshipCallout();
 
   }
 
+  function renderRelationshipCallout() {
+    if (!state.relationshipMode || !state.relationshipResult || !state.highlightPath.length) return "";
+    var points = state.highlightPath.map(byId).filter(Boolean);
+    if (!points.length) return "";
+    var minX = Math.min.apply(null, points.map(function xOf(person) { return person.x; }));
+    var maxX = Math.max.apply(null, points.map(function xOf(person) { return person.x; }));
+    var minY = Math.min.apply(null, points.map(function yOf(person) { return person.y; }));
+    var x = Math.round((minX + maxX) / 2);
+    var y = Math.round(minY - TREE_NODE_HALF_Y - 72);
+    return [
+      "<aside class=\"relationship-popover\" style=\"left:" + x + "px;top:" + y + "px\">",
+      "<span>How related?</span>",
+      "<strong>" + escapeHTML(state.relationshipResult.sentence) + "</strong>",
+      "</aside>"
+    ].join("");
+  }
+
   function renderEditHandles() {
-    if (!state.editMode) return "";
+    if (!state.editMode || state.relationshipMode) return "";
     var person = byId(state.selectedPersonId);
     if (!person || person.status === "deleted") return "";
     var actions = [
       { key: "parent", label: "+ Parent", tooltip: "Add this person's mother, father or parent above them.", x: 0, y: -TREE_NODE_HALF_Y - 56 },
       { key: "sibling", label: "+ Sibling", tooltip: "Add a brother or sister on the same generation line.", x: -TREE_NODE_HALF_X - 78, y: 0 },
+      { key: "cousin", label: "+ Cousin", tooltip: "Add a cousin without needing to know the full parent line yet.", x: -TREE_NODE_HALF_X - 78, y: TREE_NODE_HALF_Y + 56 },
       { key: "partner", label: "+ Partner", tooltip: "Add a husband, wife or partner beside this person.", x: TREE_NODE_HALF_X + 78, y: 0 },
       { key: "child", label: "+ Child", tooltip: "Add this person's child below them.", x: 0, y: TREE_NODE_HALF_Y + 56 }
     ];
@@ -1069,7 +1097,7 @@
     if (extraClass) className += " " + extraClass;
     var highlighted = pathPairs.has(pairKey(relationshipItem.from, relationshipItem.to)) ||
       (!state.highlightPath.length && state.highlightPeople.has(relationshipItem.from) && state.highlightPeople.has(relationshipItem.to));
-    if (state.highlightPeople.size && !highlighted) className += " muted";
+    if (state.relationshipMode && state.highlightPeople.size && !highlighted) className += " muted";
     if (highlighted) className += " highlight";
     path.setAttribute("class", className);
     els.relationshipLines.appendChild(path);
@@ -1454,8 +1482,11 @@
       activeRelationships()
     );
     var path = result.path || [];
-    state.highlightPath = path;
-    state.highlightPeople = new Set(path);
+    state.relationshipResult = result;
+    if (state.relationshipMode) {
+      state.highlightPath = path;
+      state.highlightPeople = new Set(path);
+    }
     els.relationshipResult.innerHTML = [
       "<strong>" + escapeHTML(result.sentence) + "</strong>",
       "<p class=\"muted\">" + escapeHTML(result.explanation) + "</p>",
@@ -1466,6 +1497,26 @@
         ? "<p class=\"muted\">Multiple or ambiguous paths may exist.</p>"
         : ""
     ].join("");
+  }
+
+  function pickRelationshipPerson(personId) {
+    if (!byId(personId)) return;
+    if (state.relationshipPickSlot === "a") {
+      state.relationshipA = personId;
+      if (state.relationshipB === personId) {
+        state.relationshipB = CURRENT_USER_ID === personId ? "sibling" : CURRENT_USER_ID;
+      }
+      state.relationshipPickSlot = "b";
+    } else {
+      state.relationshipB = personId;
+      if (state.relationshipA === personId) {
+        state.relationshipA = CURRENT_USER_ID === personId ? "sibling" : CURRENT_USER_ID;
+      }
+      state.relationshipPickSlot = "a";
+    }
+    renderSelectors();
+    renderRelationshipExplorer();
+    renderMap();
   }
 
   function renderExplore() {
@@ -2182,6 +2233,7 @@
     if (els.relativeConnectionLabel) {
       els.relativeConnectionLabel.textContent = "Who are they to " + primaryName(base) + "?";
     }
+    updateSiblingParentChoice();
     els.duplicateResults.hidden = true;
     els.duplicateResults.innerHTML = "";
     els.relativeDialog.showModal();
@@ -2206,7 +2258,7 @@
     var base = byId(state.selectedPersonId) || byId(CURRENT_USER_ID);
     var coParentId = chooseCoParentForChild(base, connection);
     if (coParentId === false) return;
-    if (!confirmSiblingParents(base, connection)) return;
+    var siblingParentMode = siblingParentChoice(base, connection);
     if (!firstName) return;
     els.relativeDialog.close();
 
@@ -2232,7 +2284,7 @@
         roleHint: connectionLabel(connection),
         partnerPrompt: "Add husband, wife or partner"
       });
-      if (!connectPeople(id, base.id, connection, { coParentId: coParentId })) {
+      if (!connectPeople(id, base.id, connection, { coParentId: coParentId, siblingParentMode: siblingParentMode })) {
         people = people.filter(function removeFailed(person) {
           return person.id !== id;
         });
@@ -2249,7 +2301,7 @@
     if (!base || !byId(existingId)) return;
     els.relativeDialog.close();
     withUndo("Connected", function connectExisting() {
-      if (!connectPeople(existingId, base.id, connection, {})) return;
+      if (!connectPeople(existingId, base.id, connection, { siblingParentMode: siblingParentChoice(base, connection) })) return;
       addActivity(CURRENT_USER_ID, "connected " + personName(existingId) + " to " + primaryName(base));
       state.selectedPersonId = existingId;
     });
@@ -2275,14 +2327,31 @@
     return choice <= partners.length ? partners[choice - 1].id : null;
   }
 
-  function confirmSiblingParents(base, connection) {
-    if (!base || connection !== "sibling") return true;
-    var parents = graph().parentsByChild.get(base.id) || [];
-    if (parents.length < 2) return true;
+  function siblingParentChoice(base, connection) {
+    if (!base || connection !== "sibling") return "shared";
+    if (!els.siblingParentChoice || els.siblingParentChoice.hidden) return "shared";
+    var checked = els.relativeForm.querySelector("input[name='siblingParents']:checked");
+    return checked ? checked.value : "shared";
+  }
+
+  function updateSiblingParentChoice() {
+    if (!els.siblingParentChoice || !els.relativeForm) return;
+    var connection = String(els.relativeForm.elements.connection.value || "");
+    var base = byId(state.selectedPersonId) || byId(CURRENT_USER_ID);
+    var parents = base ? (graph().parentsByChild.get(base.id) || []) : [];
+    var shouldShow = connection === "sibling" && parents.length > 0;
+    els.siblingParentChoice.hidden = !shouldShow;
+    if (!shouldShow) return;
     var names = parents.map(function toName(parentRef) {
       return personName(parentRef.id);
     }).join(" and ");
-    return window.confirm("Should this sibling share both known parents with " + primaryName(base) + "?\n\nKnown parents: " + names);
+    if (els.siblingParentHint) {
+      els.siblingParentHint.textContent = parents.length > 1
+        ? "Known parents: " + names + ". Choose no if this is a half-sibling, step-sibling, or you are not sure."
+        : "Known parent: " + names + ". Choose no if this parent should not be copied.";
+    }
+    var shared = els.relativeForm.querySelector("input[name='siblingParents'][value='shared']");
+    if (shared) shared.checked = true;
   }
 
   function connectPeople(subjectId, baseId, connection, options) {
@@ -2301,7 +2370,7 @@
     if (connection === "family_link") planned.push({ from: subjectId, to: baseId, type: "direct_family_link" });
     if (connection === "sibling") {
       var parents = graph().parentsByChild.get(baseId) || [];
-      if (parents.length) {
+      if (parents.length && settings.siblingParentMode !== "separate") {
         parents.forEach(function connectParent(parentRef) {
           planned.push({ from: parentRef.id, to: subjectId, type: parentRef.type || "biological_parent" });
         });
@@ -2793,11 +2862,15 @@
 
     document.getElementById("connectionsButton").addEventListener("click", function showConnections() {
       endDemo();
-      state.moreOpen = true;
+      state.moreOpen = false;
+      state.relationshipMode = true;
+      state.editMode = false;
       if (els.lowerGrid) els.lowerGrid.hidden = false;
       els.connectionsPanel.classList.remove("connections-panel-collapsed");
-      state.relationshipA = "sibling";
+      state.relationshipA = state.selectedPersonId || CURRENT_USER_ID;
       state.relationshipB = CURRENT_USER_ID;
+      if (state.relationshipA === state.relationshipB) state.relationshipA = "sibling";
+      state.relationshipPickSlot = "a";
       state.collapsedBranches = false;
       renderAll();
       fitFamilyOverview();
@@ -2805,9 +2878,11 @@
 
     document.getElementById("closeConnectionsButton").addEventListener("click", function closeConnections() {
       els.connectionsPanel.classList.add("connections-panel-collapsed");
+      state.relationshipMode = false;
       if (els.lowerGrid && !state.moreOpen) els.lowerGrid.hidden = true;
       state.highlightPath = [];
       state.highlightPeople = new Set();
+      state.relationshipResult = null;
       renderMap();
     });
 
@@ -2826,21 +2901,25 @@
     });
 
     els.personASelect.addEventListener("change", function changeA(event) {
+      state.relationshipMode = true;
       state.relationshipA = event.target.value;
       renderRelationshipExplorer();
       renderMap();
     });
     els.personBSelect.addEventListener("change", function changeB(event) {
+      state.relationshipMode = true;
       state.relationshipB = event.target.value;
       renderRelationshipExplorer();
       renderMap();
     });
 
-    els.themeSelect.addEventListener("change", function changeTheme(event) {
-      state.theme = event.target.value;
-      persist();
-      applyTheme();
-    });
+    if (els.themeSelect) {
+      els.themeSelect.addEventListener("change", function changeTheme(event) {
+        state.theme = event.target.value;
+        persist();
+        applyTheme();
+      });
+    }
 
     document.querySelectorAll("[data-accent]").forEach(function bindSwatch(button) {
       button.addEventListener("click", function setAccent() {
@@ -2901,6 +2980,7 @@
     if (els.suggestForm) els.suggestForm.addEventListener("submit", submitSuggestion);
     els.relativeForm.addEventListener("submit", submitRelative);
     els.relativeForm.addEventListener("input", renderDuplicateMatches);
+    els.relativeForm.elements.connection.addEventListener("change", updateSiblingParentChoice);
     if (els.inviteForm) els.inviteForm.addEventListener("submit", submitInvite);
     var accessRequestForm = document.getElementById("accessRequestForm");
     if (accessRequestForm) accessRequestForm.addEventListener("submit", submitGateRequest);
@@ -2929,6 +3009,10 @@
     }
     var personButton = event.target.closest("[data-person-id]");
     if (personButton) {
+      if (state.relationshipMode) {
+        pickRelationshipPerson(personButton.dataset.personId);
+        return;
+      }
       selectPerson(personButton.dataset.personId, true);
       return;
     }
