@@ -126,8 +126,8 @@
     relationshipPickSlot: "a",
     showDates: false,
     moreOpen: false,
-    theme: "gallery",
-    accent: "#70717c"
+    theme: "minimal",
+    accent: "#756955"
   };
 
   var lastUndo = null;
@@ -137,10 +137,15 @@
   var suppressNextPersonClick = false;
   var TREE_WORLD_WIDTH = 3600;
   var TREE_WORLD_HEIGHT = 2400;
-  var TREE_NODE_WIDTH = 168;
-  var TREE_NODE_HEIGHT = 248;
+  var TREE_NODE_WIDTH = 156;
+  var TREE_NODE_HEIGHT = 246;
   var TREE_NODE_HALF_X = TREE_NODE_WIDTH / 2;
   var TREE_NODE_HALF_Y = TREE_NODE_HEIGHT / 2;
+  var WALL_MIN_WIDTH = 2400;
+  var WALL_MIN_HEIGHT = 1700;
+  var WALL_MARGIN_MIN = 430;
+  var cropDrag = null;
+  var SHARE_LINK_MAX_LENGTH = 24000;
   var TIMELINE_START_YEAR = 1900;
   var TIMELINE_END_YEAR = 2026;
   var TIMELINE_TOP_Y = 360;
@@ -153,6 +158,7 @@
     privateGate: document.getElementById("privateGate"),
     mapShell: document.getElementById("mapShell"),
     mapViewport: document.getElementById("mapViewport"),
+    wallSurface: document.getElementById("wallSurface"),
     relationshipLines: document.getElementById("relationshipLines"),
     nodeLayer: document.getElementById("nodeLayer"),
     profilePanel: document.getElementById("profilePanel"),
@@ -168,6 +174,12 @@
     activityList: document.getElementById("activityList"),
     removedList: document.getElementById("removedList"),
     dailySaveList: document.getElementById("dailySaveList"),
+    shareDialog: document.getElementById("shareDialog"),
+    copyTreeLinkButton: document.getElementById("copyTreeLinkButton"),
+    downloadTreeFileButton: document.getElementById("downloadTreeFileButton"),
+    copyProfileLinkButton: document.getElementById("copyProfileLinkButton"),
+    importTreeFileInput: document.getElementById("importTreeFileInput"),
+    shareStatus: document.getElementById("shareStatus"),
     addInfoDialog: document.getElementById("addInfoDialog"),
     addInfoForm: document.getElementById("addInfoForm"),
     profilePhotoInput: document.getElementById("profilePhotoInput"),
@@ -176,6 +188,7 @@
     photoZoom: document.getElementById("photoZoom"),
     photoX: document.getElementById("photoX"),
     photoY: document.getElementById("photoY"),
+    photoResetButton: document.getElementById("photoResetButton"),
     photoRemoveButton: document.getElementById("photoRemoveButton"),
     suggestDialog: document.getElementById("suggestDialog"),
     suggestForm: document.getElementById("suggestForm"),
@@ -194,13 +207,14 @@
     tooltipBubble: document.getElementById("tooltipBubble"),
     undoButton: document.getElementById("undoButton"),
     saveButton: document.getElementById("saveButton"),
+    headerSaveButton: document.getElementById("headerSaveButton"),
     shareButton: document.getElementById("shareButton"),
     saveStatus: document.getElementById("saveStatus"),
+    familyTitle: document.getElementById("familyTitle"),
     editModeButton: document.getElementById("editModeButton"),
     moreButton: document.getElementById("moreButton"),
     fitTreeButton: document.getElementById("fitTreeButton"),
     datesToggleButton: document.getElementById("datesToggleButton"),
-    themeSelect: document.getElementById("themeSelect"),
     demoCoach: document.getElementById("demoCoach"),
     demoStepCount: document.getElementById("demoStepCount"),
     demoTitle: document.getElementById("demoTitle"),
@@ -220,7 +234,7 @@
         state.editMode = false;
         state.selectedPersonId = CURRENT_USER_ID;
         state.collapsedBranches = false;
-        highlightImmediateFamily(CURRENT_USER_ID);
+        clearRelationshipFocus();
         centerOnPerson(CURRENT_USER_ID);
         renderProfile();
       }
@@ -275,7 +289,7 @@
     {
       selector: "#shareButton",
       title: "Share with family",
-      text: "Share link copies this view so another family member can open it and help fill in the basics.",
+      text: "Share opens this view for another family member so they can help fill in the basics.",
       prepare: function prepareShare() {
         closeFloatingSurfaces();
         if (els.privateGate) els.privateGate.hidden = true;
@@ -456,7 +470,8 @@
       zoom: 1,
       x: 0,
       y: 0,
-      croppedDataUrl: ""
+      croppedDataUrl: "",
+      sourceDataUrl: ""
     };
   }
 
@@ -478,6 +493,10 @@
     return safePhotoDataUrl(person && person.photoData);
   }
 
+  function personPhotoSourceData(person) {
+    return safePhotoDataUrl(person && (person.photoSourceData || person.photoData));
+  }
+
   function hasPersonPhoto(person) {
     return Boolean(personPhotoData(person) || (person && !person.placeholder && person.photo != null));
   }
@@ -488,7 +507,7 @@
       return "<div class=\"profile-photo\" style=\"background-image:url('" + escapeHTML(dataUrl) + "');background-position:center;background-size:cover\"></div>";
     }
     if (person.placeholder || person.photo == null) {
-      return "<div class=\"profile-photo ghost-profile\" aria-hidden=\"true\"></div>";
+      return "<div class=\"profile-photo ghost-profile\" aria-hidden=\"true\"><span class=\"profile-initials\">" + escapeHTML(initialsForPerson(person)) + "</span></div>";
     }
     return "<div class=\"profile-photo\" style=\"background-position:" + photoPosition(person) + "\"></div>";
   }
@@ -510,9 +529,24 @@
     }
     if (person.placeholder || person.photo == null) {
       classes.push("ghost");
-      return "<span class=\"" + classes.join(" ") + "\" aria-hidden=\"true\"></span>";
+      return "<span class=\"" + classes.join(" ") + "\" aria-hidden=\"true\"><span class=\"portrait-initials\">" + escapeHTML(initialsForPerson(person)) + "</span></span>";
     }
     return "<span class=\"" + classes.join(" ") + "\" aria-hidden=\"true\" style=\"background-position:" + photoPosition(person) + "\"></span>";
+  }
+
+  function initialsForPerson(person) {
+    var first = String(person && person.firstName || "").trim();
+    var last = String(person && person.lastName || "").trim();
+    if (!first || /^parent|sibling|you$/i.test(first)) first = "";
+    if (!last) {
+      var parts = splitNameParts(person && person.name || "");
+      first = first || parts.firstName;
+      last = parts.lastName;
+    }
+    var initials = [first, last].filter(Boolean).map(function initial(value) {
+      return value.charAt(0).toUpperCase();
+    }).join("").slice(0, 2);
+    return initials || "?";
   }
 
   function normalizeDateInput(value) {
@@ -639,6 +673,144 @@
       activity: activity,
       selectedPersonId: state.selectedPersonId
     }));
+  }
+
+  function shareSnapshot(includePhotos) {
+    var data = snapshot();
+    if (includePhotos) return data;
+    data.people = (data.people || []).map(function stripPhotoFields(person) {
+      var copy = Object.assign({}, person);
+      copy.photoData = "";
+      copy.photoSourceData = "";
+      copy.photoCrop = null;
+      return copy;
+    });
+    return data;
+  }
+
+  function countSharedPhotos(data) {
+    return (data.people || []).filter(function hasSharedPhoto(person) {
+      return Boolean(person && person.photoData);
+    }).length;
+  }
+
+  function makeSharePayload(includePhotos) {
+    var data = shareSnapshot(includePhotos);
+    return {
+      type: "family-tree-share",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      title: familyTreeTitle(),
+      peopleCount: (data.people || []).length,
+      relationshipCount: (data.relationships || []).length,
+      photoCount: countSharedPhotos(data),
+      includesPhotos: Boolean(includePhotos),
+      data: data
+    };
+  }
+
+  function bytesToBase64Url(bytes) {
+    var binary = "";
+    var chunkSize = 32768;
+    for (var index = 0; index < bytes.length; index += chunkSize) {
+      var chunk = bytes.subarray(index, index + chunkSize);
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    return window.btoa(binary)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+  }
+
+  function base64UrlToBytes(value) {
+    var base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) base64 += "=";
+    var binary = window.atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  function encodeSharePayload(payload) {
+    var json = JSON.stringify(payload);
+    if (window.TextEncoder) return bytesToBase64Url(new TextEncoder().encode(json));
+    return window.btoa(unescape(encodeURIComponent(json)))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+  }
+
+  function decodeSharePayload(value) {
+    if (window.TextDecoder) {
+      return JSON.parse(new TextDecoder().decode(base64UrlToBytes(value)));
+    }
+    var base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) base64 += "=";
+    return JSON.parse(decodeURIComponent(escape(window.atob(base64))));
+  }
+
+  function buildShareUrl(includePhotos) {
+    var url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "tree=" + encodeSharePayload(makeSharePayload(includePhotos));
+    return url.toString();
+  }
+
+  function normalizeSharePayload(input) {
+    var payload = input && input.type === "family-tree-share" ? input : { data: input };
+    var data = payload && payload.data;
+    if (!data || !Array.isArray(data.people) || !Array.isArray(data.relationships)) {
+      throw new Error("This does not look like a Family Tree share file.");
+    }
+    return {
+      title: payload.title || "Family Tree",
+      exportedAt: payload.exportedAt || "",
+      includesPhotos: Boolean(payload.includesPhotos),
+      peopleCount: Number(payload.peopleCount) || data.people.length,
+      relationshipCount: Number(payload.relationshipCount) || data.relationships.length,
+      photoCount: Number(payload.photoCount) || countSharedPhotos(data),
+      data: data
+    };
+  }
+
+  function confirmImportSharedTree(share) {
+    var parts = [
+      "Import \"" + share.title + "\"?",
+      "",
+      share.peopleCount + " people",
+      share.relationshipCount + " family connections",
+      share.photoCount + " photos"
+    ];
+    if (!share.includesPhotos) {
+      parts.push("Photos are not included in this update link. Existing photos on this device will be kept where possible.");
+    }
+    parts.push("", "This replaces the family tree saved in this browser. A restore point will be kept.");
+    return window.confirm(parts.join("\n"));
+  }
+
+  function preserveExistingPhotos(data) {
+    var currentById = new Map(people.map(function mapPerson(person) {
+      return [person.id, person];
+    }));
+    var copy = JSON.parse(JSON.stringify(data));
+    copy.people = (copy.people || []).map(function keepPhoto(person) {
+      var existing = currentById.get(person.id);
+      if (!existing || person.photoData) return person;
+      if (existing.photoData) person.photoData = existing.photoData;
+      if (existing.photoSourceData) person.photoSourceData = existing.photoSourceData;
+      if (existing.photoCrop) person.photoCrop = existing.photoCrop;
+      if (existing.photo != null) person.photo = existing.photo;
+      return person;
+    });
+    return copy;
+  }
+
+  function importSharedTree(share, message) {
+    lastUndo = snapshot();
+    restore(share.includesPhotos ? share.data : preserveExistingPhotos(share.data));
+    showToast(message || "Imported shared tree", true);
   }
 
   function dateKey(date) {
@@ -776,10 +948,10 @@
         }
       }));
       rememberDailySnapshot();
-      updateSaveStatus("Saved on this device");
+      updateSaveStatus("Saved");
     } catch (error) {
       console.warn("Unable to save local prototype state.", error);
-      updateSaveStatus("Could not save");
+      updateSaveStatus("Not saved");
     }
   }
 
@@ -803,8 +975,8 @@
       activity = saved.activity || activity;
       if (saved.state) {
         state.selectedPersonId = saved.state.selectedPersonId || state.selectedPersonId;
-        state.theme = saved.state.theme || state.theme;
-        state.accent = saved.state.accent || state.accent;
+        state.theme = "minimal";
+        state.accent = "#756955";
         state.showDates = Boolean(saved.state.showDates);
       }
     } catch (error) {
@@ -820,11 +992,45 @@
   function applyTheme() {
     document.body.dataset.theme = state.theme;
     document.documentElement.style.setProperty("--accent", state.accent);
-    if (els.themeSelect) els.themeSelect.value = state.theme;
+  }
+
+  function renderFamilyTitle() {
+    var title = familyTreeTitle();
+    if (els.familyTitle) els.familyTitle.textContent = title;
+    document.title = title;
+  }
+
+  function familyTreeTitle() {
+    var current = byId(CURRENT_USER_ID);
+    var currentLast = cleanFamilySurname(current && current.lastName);
+    if (currentLast) return currentLast + " Family";
+    var counts = new Map();
+    people.forEach(function countSurname(person) {
+      if (!person || person.status === "deleted") return;
+      var surname = cleanFamilySurname(person.lastName || splitNameParts(person.name).lastName);
+      if (!surname) return;
+      counts.set(surname, (counts.get(surname) || 0) + 1);
+    });
+    var best = "";
+    var bestCount = 0;
+    counts.forEach(function pick(count, surname) {
+      if (count > bestCount) {
+        best = surname;
+        bestCount = count;
+      }
+    });
+    return best ? best + " Family" : "Family Tree";
+  }
+
+  function cleanFamilySurname(value) {
+    var text = String(value || "").trim();
+    if (!text || /^parent|sibling|you$/i.test(text)) return "";
+    return text;
   }
 
   function renderAll() {
     applyTheme();
+    renderFamilyTitle();
     document.body.classList.toggle("is-editing-tree", state.editMode);
     document.body.classList.toggle("is-more-open", state.moreOpen);
     document.body.classList.toggle("is-relationship-mode", state.relationshipMode);
@@ -832,7 +1038,7 @@
       els.lowerGrid.hidden = !state.moreOpen && els.connectionsPanel.classList.contains("connections-panel-collapsed");
     }
     if (els.editModeButton) {
-      els.editModeButton.textContent = state.editMode ? "Done editing" : "Edit tree";
+      els.editModeButton.textContent = state.editMode ? "Done" : "Edit";
       els.editModeButton.setAttribute("aria-pressed", String(state.editMode));
     }
     if (els.datesToggleButton) {
@@ -873,6 +1079,7 @@
     document.body.classList.toggle("show-dates", state.showDates);
     els.mapShell.classList.toggle("is-overview", state.zoom < 0.52);
     els.zoomLevel.value = Math.round(state.zoom * 100) + "%";
+    syncWallDimensions();
     clampPan();
     els.mapViewport.style.transform = "translate(" + state.panX + "px, " + state.panY + "px) scale(" + state.zoom + ")";
 
@@ -892,6 +1099,7 @@
         " aria-label=\"Open " + escapeHTML(primaryName(person)) + "\"",
         " style=\"left:" + person.x + "px;top:" + person.y + "px\">",
         portraitMarkup(person),
+        state.editMode ? "<span class=\"node-photo-action\" data-open-photo-for-person=\"" + escapeHTML(person.id) + "\">Change photo</span>" : "",
         "<span class=\"node-name\">" + escapeHTML(primaryName(person)) + "</span>",
         "<span class=\"node-years\">" + escapeHTML(years(person) || "Unknown") + "</span>",
         person.id === CURRENT_USER_ID ? "<span class=\"node-tag\" aria-label=\"You\"></span>" : "",
@@ -910,13 +1118,18 @@
     var maxX = Math.max.apply(null, points.map(function xOf(person) { return person.x; }));
     var minY = Math.min.apply(null, points.map(function yOf(person) { return person.y; }));
     var x = Math.round((minX + maxX) / 2);
-    var y = Math.round(minY - TREE_NODE_HALF_Y - 72);
+    var y = Math.round(minY + TREE_NODE_HALF_Y + 32);
     return [
-      "<aside class=\"relationship-popover\" style=\"left:" + x + "px;top:" + y + "px\">",
+      "<aside class=\"relationship-popover\" style=\"left:" + x + "px;top:" + y + "px;--inverse-zoom:" + inverseZoomValue() + "\">",
       "<span>How related?</span>",
       "<strong>" + escapeHTML(state.relationshipResult.sentence) + "</strong>",
       "</aside>"
     ].join("");
+  }
+
+  function inverseZoomValue() {
+    var inverse = state.zoom ? 1 / state.zoom : 1;
+    return String(Math.max(0.85, Math.min(2.2, inverse)).toFixed(3));
   }
 
   function renderEditHandles() {
@@ -924,20 +1137,21 @@
     var person = byId(state.selectedPersonId);
     if (!person || person.status === "deleted") return "";
     var actions = [
-      { key: "parent", label: "+ Parent", tooltip: "Add this person's mother, father or parent above them.", x: 0, y: -TREE_NODE_HALF_Y - 56 },
-      { key: "sibling", label: "+ Sibling", tooltip: "Add a brother or sister on the same generation line.", x: -TREE_NODE_HALF_X - 78, y: 0 },
-      { key: "cousin", label: "+ Cousin", tooltip: "Add a cousin without needing to know the full parent line yet.", x: -TREE_NODE_HALF_X - 78, y: TREE_NODE_HALF_Y + 56 },
-      { key: "partner", label: "+ Partner", tooltip: "Add a husband, wife or partner beside this person.", x: TREE_NODE_HALF_X + 78, y: 0 },
-      { key: "child", label: "+ Child", tooltip: "Add this person's child below them.", x: 0, y: TREE_NODE_HALF_Y + 56 }
+      { key: "parent", label: "Parent", tooltip: "Add this person's mother, father or parent." },
+      { key: "sibling", label: "Sibling", tooltip: "Add a brother or sister on the same generation line." },
+      { key: "cousin", label: "Cousin", tooltip: "Add a cousin without needing to know the full parent line yet." },
+      { key: "partner", label: "Partner", tooltip: "Add a husband, wife or partner." },
+      { key: "child", label: "Child", tooltip: "Add this person's child." }
     ];
     return [
-      "<div class=\"edit-handle-layer\" style=\"left:" + person.x + "px;top:" + person.y + "px\">",
+      "<div class=\"edit-handle-layer\" style=\"left:" + person.x + "px;top:" + person.y + "px;--inverse-zoom:" + inverseZoomValue() + "\">",
+      "<span class=\"edit-popover-label\">Add</span>",
       actions.map(function renderAction(action) {
         return [
           "<button class=\"edit-handle " + escapeHTML(action.key) + "\" type=\"button\"",
           " data-open-relative data-default-connection=\"" + escapeHTML(action.key) + "\"",
           " data-tooltip=\"" + escapeHTML(action.tooltip) + "\"",
-          " style=\"left:" + action.x + "px;top:" + action.y + "px\">",
+          ">",
           escapeHTML(action.label),
           "</button>"
         ].join("");
@@ -951,12 +1165,13 @@
       rootId: CURRENT_USER_ID,
       nodeWidth: TREE_NODE_WIDTH,
       nodeHeight: TREE_NODE_HEIGHT,
-      originX: TREE_WORLD_WIDTH / 2,
-      originY: TREE_WORLD_HEIGHT / 2 + 130,
-      rowGap: 330,
-      partnerGap: 34,
-      unitGap: 128
+      originX: 1800,
+      originY: 1320,
+      rowGap: 390,
+      partnerGap: 58,
+      unitGap: 172
     });
+    updateWallMetricsFromLayout(lastLayout);
     people.forEach(function applyPosition(person) {
       var point = lastLayout.positions.get(person.id);
       if (!point) return;
@@ -964,6 +1179,46 @@
       person.y = point.y;
       person.generation = point.generation;
     });
+  }
+
+  function updateWallMetricsFromLayout(layout) {
+    var active = visiblePeople();
+    var positioned = active.map(function toPoint(person) {
+      var point = layout.positions.get(person.id);
+      return point ? { person: person, x: point.x, y: point.y } : null;
+    }).filter(Boolean);
+    if (!positioned.length) return;
+    var minX = Math.min.apply(null, positioned.map(function min(item) { return item.x - TREE_NODE_HALF_X; }));
+    var maxX = Math.max.apply(null, positioned.map(function max(item) { return item.x + TREE_NODE_HALF_X; }));
+    var minY = Math.min.apply(null, positioned.map(function min(item) { return item.y - TREE_NODE_HALF_Y; }));
+    var maxY = Math.max.apply(null, positioned.map(function max(item) { return item.y + TREE_NODE_HALF_Y; }));
+    var treeWidth = Math.max(1, maxX - minX);
+    var treeHeight = Math.max(1, maxY - minY);
+    var wallMargin = Math.max(WALL_MARGIN_MIN, Math.round(Math.max(treeWidth, treeHeight) * 0.22));
+    TREE_WORLD_WIDTH = Math.max(WALL_MIN_WIDTH, Math.ceil(treeWidth + wallMargin * 2));
+    TREE_WORLD_HEIGHT = Math.max(WALL_MIN_HEIGHT, Math.ceil(treeHeight + wallMargin * 2));
+    var offsetX = Math.round((TREE_WORLD_WIDTH - treeWidth) / 2 - minX);
+    var offsetY = Math.round((TREE_WORLD_HEIGHT - treeHeight) / 2 - minY);
+    positioned.forEach(function move(item) {
+      var existing = layout.positions.get(item.person.id);
+      if (!existing) return;
+      existing.x = Math.round(existing.x + offsetX);
+      existing.y = Math.round(existing.y + offsetY);
+    });
+  }
+
+  function syncWallDimensions() {
+    var width = TREE_WORLD_WIDTH + "px";
+    var height = TREE_WORLD_HEIGHT + "px";
+    els.mapViewport.style.width = width;
+    els.mapViewport.style.height = height;
+    if (els.wallSurface) {
+      els.wallSurface.style.width = width;
+      els.wallSurface.style.height = height;
+    }
+    els.relationshipLines.setAttribute("viewBox", "0 0 " + TREE_WORLD_WIDTH + " " + TREE_WORLD_HEIGHT);
+    els.relationshipLines.style.width = width;
+    els.relationshipLines.style.height = height;
   }
 
   function layoutRow(items, centerX, y, gap) {
@@ -1151,7 +1406,7 @@
     ].join("") : "";
 
     els.profilePanel.innerHTML = [
-      "<div class=\"profile-hero " + (state.editMode ? "photo-drop-target " : "") + genderClass(person) + (hasPersonPhoto(person) ? "" : " missing") + "\"" + (state.editMode ? " data-photo-drop-person-id=\"" + escapeHTML(person.id) + "\"" : "") + ">",
+      "<div class=\"profile-hero " + (state.editMode ? "photo-drop-target " : "") + genderClass(person) + (hasPersonPhoto(person) ? "" : " missing") + "\"" + (state.editMode ? " data-photo-drop-person-id=\"" + escapeHTML(person.id) + "\" data-open-photo-for-person=\"" + escapeHTML(person.id) + "\"" : "") + ">",
       profilePhotoMarkup(person),
       "<div class=\"profile-title\">",
       "<p>" + escapeHTML(person.roleHint || years(person) || relation.label) + "</p>",
@@ -1528,7 +1783,7 @@
       "<div><strong>3</strong><span>Tap each Parent, then add partners, siblings and older relatives one at a time.</span></div>",
       "<div><strong>4</strong><span>Save, then share a link with someone who knows more.</span></div>",
       "</div>",
-      "<div class=\"notice-box\"><strong>Built for family memory</strong><span>Older relatives can add names, dates, stories and photos without needing to understand a database.</span></div>"
+      "<div class=\"notice-box\"><strong>Built for family memory</strong><span>Older relatives can add names, dates, stories and photos without needing to learn a new system.</span></div>"
     ].join("");
   }
 
@@ -1749,6 +2004,12 @@
     els.searchResults.hidden = true;
   }
 
+  function clearRelationshipFocus() {
+    state.highlightPath = [];
+    state.highlightPeople = new Set();
+    state.relationshipResult = null;
+  }
+
   function highlightImmediateFamily(personId) {
     var currentGraph = graph();
     var ids = new Set([personId]);
@@ -1781,8 +2042,14 @@
 
   function resetPhotoDraft(person) {
     photoDraft = emptyPhotoDraft();
-    photoDraft.dataUrl = personPhotoData(person);
+    photoDraft.dataUrl = personPhotoSourceData(person);
+    photoDraft.sourceDataUrl = photoDraft.dataUrl;
     photoDraft.remove = false;
+    if (person && person.photoCrop) {
+      photoDraft.zoom = Number(person.photoCrop.zoom) || 1;
+      photoDraft.x = Number(person.photoCrop.x) || 0;
+      photoDraft.y = Number(person.photoCrop.y) || 0;
+    }
     if (els.profilePhotoInput) els.profilePhotoInput.value = "";
     if (photoDraft.dataUrl) {
       loadPhotoDraftImage(photoDraft.dataUrl).catch(function failPhotoPreview(error) {
@@ -1808,6 +2075,19 @@
     });
   }
 
+  function readFileAsText(file) {
+    return new Promise(function read(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function loaded() {
+        resolve(String(reader.result || ""));
+      };
+      reader.onerror = function failed() {
+        reject(reader.error);
+      };
+      reader.readAsText(file);
+    });
+  }
+
   function loadImage(dataUrl) {
     return new Promise(function load(resolve, reject) {
       var image = new Image();
@@ -1824,6 +2104,14 @@
     renderPhotoDraftPreview();
   }
 
+  async function setPhotoDraftFromDataUrl(dataUrl) {
+    photoDraft = emptyPhotoDraft();
+    photoDraft.dataUrl = dataUrl;
+    photoDraft.sourceDataUrl = dataUrl;
+    photoDraft.changed = true;
+    await loadPhotoDraftImage(dataUrl);
+  }
+
   async function handlePhotoFileChange(event) {
     var file = event.target.files && event.target.files[0];
     if (!file) return;
@@ -1832,10 +2120,7 @@
       return;
     }
     try {
-      photoDraft = emptyPhotoDraft();
-      photoDraft.dataUrl = await readFileAsDataUrl(file);
-      photoDraft.changed = true;
-      await loadPhotoDraftImage(photoDraft.dataUrl);
+      await setPhotoDraftFromDataUrl(await readFileAsDataUrl(file));
     } catch (error) {
       console.warn("Unable to read photo.", error);
       window.alert("This photo could not be opened.");
@@ -1848,6 +2133,62 @@
     photoDraft.y = Number(els.photoY.value) || 0;
     photoDraft.changed = Boolean(photoDraft.dataUrl);
     renderPhotoDraftPreview();
+  }
+
+  function resetPhotoCrop() {
+    if (!photoDraft.dataUrl) return;
+    photoDraft.zoom = 1;
+    photoDraft.x = 0;
+    photoDraft.y = 0;
+    photoDraft.changed = true;
+    renderPhotoDraftPreview();
+  }
+
+  function movePhotoCrop(deltaX, deltaY) {
+    photoDraft.x = Math.max(-50, Math.min(50, (Number(photoDraft.x) || 0) + deltaX));
+    photoDraft.y = Math.max(-50, Math.min(50, (Number(photoDraft.y) || 0) + deltaY));
+    photoDraft.changed = Boolean(photoDraft.dataUrl);
+    renderPhotoDraftPreview();
+  }
+
+  function bindPhotoCropGestures() {
+    if (!els.photoPreviewCanvas) return;
+    els.photoPreviewCanvas.tabIndex = 0;
+    els.photoPreviewCanvas.addEventListener("pointerdown", function startCropDrag(event) {
+      if (!photoDraft.dataUrl || !photoDraft.image) return;
+      cropDrag = {
+        startX: event.clientX,
+        startY: event.clientY,
+        x: Number(photoDraft.x) || 0,
+        y: Number(photoDraft.y) || 0
+      };
+      els.photoPreviewCanvas.setPointerCapture(event.pointerId);
+    });
+    els.photoPreviewCanvas.addEventListener("pointermove", function dragCrop(event) {
+      if (!cropDrag) return;
+      var rect = els.photoPreviewCanvas.getBoundingClientRect();
+      var deltaX = (event.clientX - cropDrag.startX) / Math.max(1, rect.width) * 100;
+      var deltaY = (event.clientY - cropDrag.startY) / Math.max(1, rect.height) * 100;
+      photoDraft.x = Math.max(-50, Math.min(50, cropDrag.x + deltaX));
+      photoDraft.y = Math.max(-50, Math.min(50, cropDrag.y + deltaY));
+      photoDraft.changed = true;
+      renderPhotoDraftPreview();
+    });
+    els.photoPreviewCanvas.addEventListener("pointerup", function endCropDrag() {
+      cropDrag = null;
+    });
+    els.photoPreviewCanvas.addEventListener("pointercancel", function cancelCropDrag() {
+      cropDrag = null;
+    });
+    els.photoPreviewCanvas.addEventListener("keydown", function nudgeCrop(event) {
+      var amount = event.shiftKey ? 5 : 1.5;
+      if (event.key === "ArrowLeft") movePhotoCrop(-amount, 0);
+      else if (event.key === "ArrowRight") movePhotoCrop(amount, 0);
+      else if (event.key === "ArrowUp") movePhotoCrop(0, -amount);
+      else if (event.key === "ArrowDown") movePhotoCrop(0, amount);
+      else return;
+      event.preventDefault();
+    });
   }
 
   function removePhotoDraft() {
@@ -1870,16 +2211,17 @@
   }
 
   function drawPhotoCrop(canvas, image) {
-    var size = canvas.width || 640;
+    var widthSize = canvas.width || 640;
+    var heightSize = canvas.height || 800;
     var context = canvas.getContext("2d");
     var zoom = Math.max(1, Math.min(2.6, Number(photoDraft.zoom) || 1));
-    var scale = Math.max(size / image.naturalWidth, size / image.naturalHeight) * zoom;
+    var scale = Math.max(widthSize / image.naturalWidth, heightSize / image.naturalHeight) * zoom;
     var width = image.naturalWidth * scale;
     var height = image.naturalHeight * scale;
-    var x = (size - width) / 2 + (Number(photoDraft.x) || 0) * size / 100;
-    var y = (size - height) / 2 + (Number(photoDraft.y) || 0) * size / 100;
-    context.fillStyle = "#f1f4f8";
-    context.fillRect(0, 0, size, size);
+    var x = (widthSize - width) / 2 + (Number(photoDraft.x) || 0) * widthSize / 100;
+    var y = (heightSize - height) / 2 + (Number(photoDraft.y) || 0) * heightSize / 100;
+    context.fillStyle = "#f5efe6";
+    context.fillRect(0, 0, widthSize, heightSize);
     context.drawImage(image, x, y, width, height);
     photoDraft.croppedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
   }
@@ -1897,7 +2239,13 @@
     return {
       changed: true,
       remove: false,
-      dataUrl: photoDraft.croppedDataUrl || photoDraft.dataUrl
+      dataUrl: photoDraft.croppedDataUrl || photoDraft.dataUrl,
+      sourceDataUrl: photoDraft.sourceDataUrl || photoDraft.dataUrl,
+      crop: {
+        zoom: Number(photoDraft.zoom) || 1,
+        x: Number(photoDraft.x) || 0,
+        y: Number(photoDraft.y) || 0
+      }
     };
   }
 
@@ -1934,15 +2282,12 @@
     if (!person || !file) return;
     try {
       var dataUrl = await readFileAsDataUrl(file);
-      var image = await loadImage(dataUrl);
-      var croppedDataUrl = squarePhotoDataUrl(image);
-      withUndo("Photo added", function addDroppedPhoto() {
-        person.photoData = croppedDataUrl;
-        person.photo = null;
-        person.placeholder = false;
-        state.selectedPersonId = person.id;
-        addActivity(CURRENT_USER_ID, "added a photo for " + primaryName(person));
-      });
+      state.selectedPersonId = person.id;
+      renderMap();
+      renderProfile();
+      openAddInfoDialog();
+      await setPhotoDraftFromDataUrl(dataUrl);
+      showToast("Position the photo, then Done", false);
     } catch (error) {
       console.warn("Unable to drop photo.", error);
       window.alert("This photo could not be opened.");
@@ -2012,9 +2357,13 @@
       if (hasPhotoUpdate) {
         if (photoUpdate.remove) {
           person.photoData = "";
+          person.photoSourceData = "";
+          person.photoCrop = null;
           person.photo = null;
         } else {
           person.photoData = photoUpdate.dataUrl;
+          person.photoSourceData = photoUpdate.sourceDataUrl;
+          person.photoCrop = photoUpdate.crop;
           person.photo = null;
           person.placeholder = false;
         }
@@ -2275,6 +2624,8 @@
         birthPlace: birthPlace,
         deathYear: null,
         photoData: "",
+        photoSourceData: "",
+        photoCrop: null,
         gender: gender,
         claimedBy: null,
         stewardId: CURRENT_USER_ID,
@@ -2601,39 +2952,31 @@
 
   function saveNow() {
     persist();
-    showToast("Saved on this device", false);
+    showToast("Saved", false);
   }
 
-  function buildShareLink() {
+  function buildProfileLink() {
     var url = new URL(window.location.href);
     url.search = "";
+    url.hash = "";
     url.searchParams.set("person", state.selectedPersonId || CURRENT_USER_ID);
     return url.toString();
   }
 
-  async function shareCurrentView() {
-    var url = buildShareLink();
-    var shareText = "Open this Family Tree profile and help fill in names, dates, places or photos.";
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Family Tree",
-          text: shareText,
-          url: url
-        });
-        showToast("Share link ready", false);
-        return;
-      } catch (error) {
-        if (error && error.name === "AbortError") return;
-      }
-    }
-    copyShareLink(url);
+  function openShareDialog() {
+    if (!els.shareDialog) return;
+    setShareStatus("People can edit their copy, then send you an update link or share file back.");
+    els.shareDialog.showModal();
   }
 
-  function copyShareLink(url) {
+  function setShareStatus(message) {
+    if (els.shareStatus) els.shareStatus.textContent = message;
+  }
+
+  function copyShareLink(url, successMessage) {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(url).then(function copied() {
-        showToast("Share link copied", false);
+        showToast(successMessage || "Share copied", false);
       }).catch(function fallbackCopy() {
         promptForShareLink(url);
       });
@@ -2642,13 +2985,89 @@
     promptForShareLink(url);
   }
 
+  function copyProfileLink() {
+    copyShareLink(buildProfileLink(), "Profile link copied");
+    setShareStatus("Profile link copied. This points people to the selected frame without replacing their saved tree.");
+  }
+
+  function copyTreeUpdateLink() {
+    var fullUrl = buildShareUrl(true);
+    var copiedPhotos = true;
+    var url = fullUrl;
+    if (fullUrl.length > SHARE_LINK_MAX_LENGTH) {
+      url = buildShareUrl(false);
+      copiedPhotos = false;
+    }
+    copyShareLink(url, "Update link copied");
+    setShareStatus(copiedPhotos
+      ? "Update link copied. Anyone who opens it can import this tree."
+      : "Copied a smaller update link without photos. Use Download share file when photos matter.");
+  }
+
+  function downloadShareFile() {
+    var payload = makeSharePayload(true);
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var link = document.createElement("a");
+    var date = dateKey(new Date());
+    link.href = URL.createObjectURL(blob);
+    link.download = "family-tree-share-" + date + ".json";
+    document.body.appendChild(link);
+    link.click();
+    window.setTimeout(function cleanupDownload() {
+      URL.revokeObjectURL(link.href);
+      link.remove();
+    }, 0);
+    setShareStatus("Share file downloaded. Send it to someone, or import one they send back.");
+    showToast("Share file ready", false);
+  }
+
+  async function importShareFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+    try {
+      var share = normalizeSharePayload(JSON.parse(await readFileAsText(file)));
+      if (!confirmImportSharedTree(share)) {
+        setShareStatus("Import skipped. Your current tree was not changed.");
+        return;
+      }
+      importSharedTree(share, "Imported share file");
+      if (els.shareDialog && els.shareDialog.open) els.shareDialog.close();
+    } catch (error) {
+      console.warn("Unable to import share file.", error);
+      window.alert("This share file could not be opened.");
+      setShareStatus("That file could not be opened. Try another Family Tree share file.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   function promptForShareLink(url) {
     window.prompt("Copy this share link", url);
-    showToast("Share link ready to copy", false);
+    showToast("Ready to copy", false);
   }
 
   function applyIncomingShareLink() {
     var params = new URLSearchParams(window.location.search);
+    var hash = window.location.hash ? window.location.hash.slice(1) : "";
+    var hashParams = new URLSearchParams(hash);
+    var sharedTree = hashParams.get("tree") || params.get("tree");
+    if (sharedTree) {
+      try {
+        var share = normalizeSharePayload(decodeSharePayload(sharedTree));
+        if (confirmImportSharedTree(share)) {
+          importSharedTree(share, "Imported shared tree");
+          var cleanUrl = new URL(window.location.href);
+          cleanUrl.hash = "";
+          cleanUrl.searchParams.delete("tree");
+          window.history.replaceState(null, "", cleanUrl.toString());
+        } else {
+          showToast("Import skipped", false);
+        }
+      } catch (error) {
+        console.warn("Unable to import shared tree.", error);
+        window.alert("This family tree link could not be opened.");
+      }
+    }
     var personId = params.get("person");
     if (personId && byId(personId)) {
       state.selectedPersonId = personId;
@@ -2668,6 +3087,7 @@
     if (els.suggestDialog && els.suggestDialog.open) els.suggestDialog.close();
     if (els.relativeDialog.open) els.relativeDialog.close();
     if (els.accessDialog && els.accessDialog.open) els.accessDialog.close();
+    if (els.shareDialog && els.shareDialog.open) els.shareDialog.close();
   }
 
   function clearDemoHighlight() {
@@ -2783,6 +3203,8 @@
     document.addEventListener("focusout", function hideFocusTooltip(event) {
       if (event.target.closest("[data-tooltip]")) hideTooltip();
     });
+    document.addEventListener("pointerdown", hideTooltip);
+    document.addEventListener("click", hideTooltip);
     window.addEventListener("scroll", hideTooltip, { passive: true });
     window.addEventListener("resize", hideTooltip);
   }
@@ -2827,7 +3249,12 @@
     els.demoNextButton.addEventListener("click", nextDemoStep);
     els.demoEndButton.addEventListener("click", endDemo);
     els.saveButton.addEventListener("click", saveNow);
-    els.shareButton.addEventListener("click", shareCurrentView);
+    if (els.headerSaveButton) els.headerSaveButton.addEventListener("click", saveNow);
+    els.shareButton.addEventListener("click", openShareDialog);
+    if (els.copyTreeLinkButton) els.copyTreeLinkButton.addEventListener("click", copyTreeUpdateLink);
+    if (els.downloadTreeFileButton) els.downloadTreeFileButton.addEventListener("click", downloadShareFile);
+    if (els.copyProfileLinkButton) els.copyProfileLinkButton.addEventListener("click", copyProfileLink);
+    if (els.importTreeFileInput) els.importTreeFileInput.addEventListener("change", importShareFile);
 
     els.editModeButton.addEventListener("click", function toggleEditMode() {
       endDemo();
@@ -2855,8 +3282,9 @@
       endDemo();
       state.selectedPersonId = CURRENT_USER_ID;
       state.collapsedBranches = false;
-      highlightImmediateFamily(CURRENT_USER_ID);
+      clearRelationshipFocus();
       centerOnPerson(CURRENT_USER_ID);
+      renderMap();
       renderProfile();
     });
 
@@ -2913,22 +3341,6 @@
       renderMap();
     });
 
-    if (els.themeSelect) {
-      els.themeSelect.addEventListener("change", function changeTheme(event) {
-        state.theme = event.target.value;
-        persist();
-        applyTheme();
-      });
-    }
-
-    document.querySelectorAll("[data-accent]").forEach(function bindSwatch(button) {
-      button.addEventListener("click", function setAccent() {
-        state.accent = button.dataset.accent;
-        persist();
-        applyTheme();
-      });
-    });
-
     var privateLandingButton = document.getElementById("privateLandingButton");
     if (privateLandingButton) {
       privateLandingButton.addEventListener("click", function showGate() {
@@ -2976,7 +3388,9 @@
     els.photoZoom.addEventListener("input", updatePhotoDraftFromControls);
     els.photoX.addEventListener("input", updatePhotoDraftFromControls);
     els.photoY.addEventListener("input", updatePhotoDraftFromControls);
+    if (els.photoResetButton) els.photoResetButton.addEventListener("click", resetPhotoCrop);
     els.photoRemoveButton.addEventListener("click", removePhotoDraft);
+    bindPhotoCropGestures();
     if (els.suggestForm) els.suggestForm.addEventListener("submit", submitSuggestion);
     els.relativeForm.addEventListener("submit", submitRelative);
     els.relativeForm.addEventListener("input", renderDuplicateMatches);
@@ -3005,6 +3419,17 @@
     if (suppressNextPersonClick) {
       suppressNextPersonClick = false;
       event.preventDefault();
+      return;
+    }
+    var photoPicker = event.target.closest("[data-open-photo-for-person]");
+    if (photoPicker && state.editMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      state.selectedPersonId = photoPicker.dataset.openPhotoForPerson;
+      renderMap();
+      renderProfile();
+      openAddInfoDialog();
+      if (els.profilePhotoInput) els.profilePhotoInput.click();
       return;
     }
     var personButton = event.target.closest("[data-person-id]");
@@ -3151,7 +3576,8 @@
   function initialCenter() {
     window.requestAnimationFrame(function center() {
       fitFamilyOverview();
-      highlightImmediateFamily(CURRENT_USER_ID);
+      clearRelationshipFocus();
+      renderMap();
     });
   }
 

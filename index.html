@@ -3,32 +3,35 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f7f8fc">
+    <meta name="theme-color" content="#f4efe6">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=35">
+    <link rel="stylesheet" href="styles.css?v=39">
   </head>
-  <body data-theme="gallery">
+  <body data-theme="minimal">
     <a class="skip-link" href="#main">Skip to family tree</a>
 
     <div class="app-frame" id="approvedApp">
       <header class="topbar" aria-label="Family space navigation">
         <div class="brand">
-          <span class="family-mark" aria-hidden="true">FT</span>
+          <span class="family-mark" aria-hidden="true">F</span>
           <div>
-            <p class="eyebrow">Shared family tree</p>
-            <h1>Family Tree</h1>
+            <p class="eyebrow">Family tree</p>
+            <h1 id="familyTitle">Family Tree</h1>
           </div>
         </div>
 
+        <label class="search-box" for="globalSearch" data-tooltip="Search people, places and dates.">
+          <span class="visually-hidden">Search family</span>
+          <input id="globalSearch" type="search" autocomplete="off" placeholder="Search family...">
+        </label>
+
         <div class="topbar-actions">
-          <label class="search-box" for="globalSearch" data-tooltip="Search names, places and dates in this family tree.">
-            <span class="visually-hidden">Search family</span>
-            <input id="globalSearch" type="search" autocomplete="off" placeholder="Find a person">
-          </label>
-          <button class="button" id="connectionsButton" type="button" data-tooltip="Pick two people and see the family line between them.">How related?</button>
-          <button class="button primary" id="editModeButton" type="button" data-tooltip="Turn on editing tools for adding people, details and photos.">Edit tree</button>
-          <button class="icon-button" id="moreButton" type="button" aria-label="More options" data-tooltip="Save, share, appearance and recovery.">...</button>
-          <span class="save-status" id="saveStatus" aria-live="polite">Saved on this device</span>
+          <button class="button tertiary" id="connectionsButton" type="button" data-tooltip="Pick two people and see the family line between them.">How related?</button>
+          <button class="button tertiary" id="shareButton" type="button" data-tooltip="Share this family tree.">Share</button>
+          <button class="button tertiary edit-save-button" id="headerSaveButton" type="button" data-tooltip="Save a checkpoint now.">Save</button>
+          <button class="button primary" id="editModeButton" type="button" data-tooltip="Add people, details and photos.">Edit</button>
+          <button class="icon-button" id="moreButton" type="button" aria-label="More options" data-tooltip="Save, demo, history and recovery.">...</button>
+          <span class="save-status" id="saveStatus" aria-live="polite">Saved</span>
         </div>
       </header>
 
@@ -36,7 +39,7 @@
         <section class="map-region" aria-labelledby="mapTitle">
           <div class="map-head">
             <div>
-              <h2 id="mapTitle">Start your family tree</h2>
+              <h2 id="mapTitle">Family tree canvas</h2>
             </div>
             <div class="map-tools" aria-label="Map controls">
               <button class="icon-button" id="zoomOutButton" type="button" aria-label="Zoom out" data-tooltip="Zoom out to see more of the family.">-</button>
@@ -45,13 +48,14 @@
               <button class="button compact" id="fitTreeButton" type="button" data-tooltip="Show the complete visible family tree.">Fit tree</button>
               <button class="button compact" id="recenterButton" type="button" aria-label="Centre on me" data-tooltip="Bring your profile back to the middle.">Me</button>
               <button class="button compact" id="datesToggleButton" type="button" aria-pressed="false" data-tooltip="Show or hide a subtle date guide behind the tree.">Dates</button>
-            <button class="button compact edit-only" id="branchButton" type="button" data-tooltip="Add another parent, sibling, cousin, partner or child.">Add relative</button>
+              <button class="button compact edit-only hidden-control" id="branchButton" type="button" data-tooltip="Add another parent, sibling, cousin, partner or child.">Add relative</button>
             </div>
           </div>
 
           <div class="map-shell" id="mapShell" tabindex="0" aria-label="Pan and zoom family tree">
             <div class="timeline-axis" aria-hidden="true"></div>
             <div class="map-viewport" id="mapViewport">
+              <div class="wall-surface" id="wallSurface" aria-hidden="true"></div>
               <svg id="relationshipLines" viewBox="0 0 3600 2400" aria-hidden="true"></svg>
               <div class="node-layer" id="nodeLayer"></div>
             </div>
@@ -72,7 +76,7 @@
             </div>
             <button class="icon-button" id="closeConnectionsButton" type="button" aria-label="Close relationship explorer" title="Close">x</button>
           </div>
-          <p class="panel-intro">Choose two people here, or click two frames on the wall. The family line and relationship will appear on the tree.</p>
+          <p class="panel-intro">Choose two people here, or click two people on the tree. The family line and relationship will appear clearly.</p>
           <div class="connection-picker">
             <label>
               Person A
@@ -86,25 +90,24 @@
           <div class="relationship-card" id="relationshipResult"></div>
         </article>
 
-        <article class="workspace-panel appearance-panel" id="appearancePanel">
+        <article class="workspace-panel options-panel" id="optionsPanel">
           <div class="panel-head">
             <div>
               <p class="eyebrow">More</p>
-              <h2>Tree options</h2>
+              <h2>Options</h2>
             </div>
           </div>
           <div class="admin-actions">
             <button class="button demo-button" id="demoButton" type="button" data-tooltip="A calm one-minute tour for first-time family members.">Demo</button>
             <button class="button" id="saveButton" type="button" data-tooltip="Save now. The tree also saves automatically each day on this device.">Save</button>
-            <button class="button" id="shareButton" type="button" data-tooltip="Copy or send a link to this family tree view.">Share link</button>
           </div>
         </article>
 
         <article class="workspace-panel history-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Daily saves</p>
-              <h2>Easy recovery</h2>
+              <p class="eyebrow">History</p>
+              <h2>Recovery</h2>
             </div>
             <button class="button compact" id="removedButton" type="button">Recently removed</button>
           </div>
@@ -131,6 +134,37 @@
         <button class="button compact" id="demoEndButton" type="button">Done</button>
       </div>
     </div>
+
+    <dialog id="shareDialog" class="modal share-modal">
+      <form method="dialog">
+        <div class="modal-head">
+          <h2>Share family tree</h2>
+          <button class="icon-button" value="cancel" type="submit" aria-label="Close" title="Close">x</button>
+        </div>
+        <div class="share-grid">
+          <section class="share-card">
+            <h3>Send an update link</h3>
+            <p>Best for names, dates and smaller trees. The person who opens it can import this family tree into their browser.</p>
+            <button class="button primary" id="copyTreeLinkButton" type="button">Copy update link</button>
+          </section>
+          <section class="share-card">
+            <h3>Include photos</h3>
+            <p>For photo-heavy trees, send a share file. It keeps the full tree and avoids over-long links.</p>
+            <div class="share-actions">
+              <button class="button" id="downloadTreeFileButton" type="button">Download share file</button>
+              <label class="button" for="importTreeFileInput">Import share file</label>
+              <input id="importTreeFileInput" type="file" accept="application/json,.json">
+            </div>
+          </section>
+          <section class="share-card">
+            <h3>Point to this person</h3>
+            <p>Copies a simple link that opens on the selected profile, without replacing anyone’s saved tree.</p>
+            <button class="button" id="copyProfileLinkButton" type="button">Copy profile link</button>
+          </section>
+        </div>
+        <p class="share-status" id="shareStatus">People can edit their copy, then send you an update link or share file back.</p>
+      </form>
+    </dialog>
 
     <dialog id="addInfoDialog" class="modal">
       <form method="dialog" id="addInfoForm">
@@ -179,26 +213,28 @@
           </label>
           <p class="field-help">On a phone, choose from Photos or take a picture. Use crop only if the face needs centering.</p>
           <div class="photo-cropper" id="photoCropper" hidden>
-            <canvas id="photoPreviewCanvas" width="640" height="640" aria-label="Photo crop preview"></canvas>
+            <canvas id="photoPreviewCanvas" width="640" height="800" aria-label="Photo crop preview"></canvas>
             <div class="crop-controls">
               <label>
                 Zoom
                 <input id="photoZoom" type="range" min="1" max="2.6" step="0.05" value="1">
               </label>
-              <label>
+              <label class="crop-position-control">
                 Left / right
                 <input id="photoX" type="range" min="-50" max="50" step="1" value="0">
               </label>
-              <label>
+              <label class="crop-position-control">
                 Up / down
                 <input id="photoY" type="range" min="-50" max="50" step="1" value="0">
               </label>
+              <p class="field-help">Drag the photo to position the face. Use the slider to zoom.</p>
+              <button class="button compact" id="photoResetButton" type="button">Reset crop</button>
             </div>
             <button class="button compact" id="photoRemoveButton" type="button">Remove photo</button>
           </div>
         </div>
         <div class="form-actions">
-          <button class="button primary" value="default" type="submit">Save</button>
+          <button class="button primary" value="default" type="submit">Done</button>
           <button class="button" value="cancel" type="submit">Cancel</button>
         </div>
       </form>
@@ -279,6 +315,6 @@
     </dialog>
 
     <script src="relationship-engine.js?v=4"></script>
-    <script src="app.js?v=33"></script>
+    <script src="app.js?v=37"></script>
   </body>
 </html>
