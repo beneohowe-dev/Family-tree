@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f4efe6">
     <title>Family Tree</title>
-    <link rel="stylesheet" href="styles.css?v=39">
+    <link rel="stylesheet" href="styles.css?v=40">
   </head>
   <body data-theme="minimal">
     <a class="skip-link" href="#main">Skip to family tree</a>
@@ -143,13 +143,13 @@
         </div>
         <div class="share-grid">
           <section class="share-card">
-            <h3>Send an update link</h3>
-            <p>Best for names, dates and smaller trees. The person who opens it can import this family tree into their browser.</p>
-            <button class="button primary" id="copyTreeLinkButton" type="button">Copy update link</button>
+            <h3>Send a clean invite</h3>
+            <p>Best for WhatsApp, email or text. It copies a normal-looking link with a short message, so it does not look suspicious.</p>
+            <button class="button primary" id="copyInviteLinkButton" type="button">Copy neat invite</button>
           </section>
           <section class="share-card">
-            <h3>Include photos</h3>
-            <p>For photo-heavy trees, send a share file. It keeps the full tree and avoids over-long links.</p>
+            <h3>Send the actual tree</h3>
+            <p>Use a share file for the full tree, especially when photos are included. They can edit it and send a file back.</p>
             <div class="share-actions">
               <button class="button" id="downloadTreeFileButton" type="button">Download share file</button>
               <label class="button" for="importTreeFileInput">Import share file</label>
@@ -157,12 +157,15 @@
             </div>
           </section>
           <section class="share-card">
-            <h3>Point to this person</h3>
-            <p>Copies a simple link that opens on the selected profile, without replacing anyone’s saved tree.</p>
-            <button class="button" id="copyProfileLinkButton" type="button">Copy profile link</button>
+            <h3>Small text update</h3>
+            <p>For names and dates only. This makes a compressed update link and leaves photos out so the URL stays smaller.</p>
+            <div class="share-actions">
+              <button class="button" id="copyTreeLinkButton" type="button">Copy compact update</button>
+              <button class="button" id="copyProfileLinkButton" type="button">Copy profile link</button>
+            </div>
           </section>
         </div>
-        <p class="share-status" id="shareStatus">People can edit their copy, then send you an update link or share file back.</p>
+        <p class="share-status" id="shareStatus">For family, send the neat invite. For the actual tree and photos, send a share file too.</p>
       </form>
     </dialog>
 
@@ -315,6 +318,6 @@
     </dialog>
 
     <script src="relationship-engine.js?v=4"></script>
-    <script src="app.js?v=37"></script>
+    <script src="app.js?v=39"></script>
   </body>
 </html>

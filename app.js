@@ -175,6 +175,7 @@
     removedList: document.getElementById("removedList"),
     dailySaveList: document.getElementById("dailySaveList"),
     shareDialog: document.getElementById("shareDialog"),
+    copyInviteLinkButton: document.getElementById("copyInviteLinkButton"),
     copyTreeLinkButton: document.getElementById("copyTreeLinkButton"),
     downloadTreeFileButton: document.getElementById("downloadTreeFileButton"),
     copyProfileLinkButton: document.getElementById("copyProfileLinkButton"),
@@ -733,28 +734,135 @@
     return bytes;
   }
 
-  function encodeSharePayload(payload) {
+  function lzwCompressBytes(bytes) {
+    var dict = new Map();
+    for (var index = 0; index < 256; index += 1) {
+      dict.set(String.fromCharCode(index), index);
+    }
+    var phrase = "";
+    var codes = [];
+    var nextCode = 256;
+    for (var byteIndex = 0; byteIndex < bytes.length; byteIndex += 1) {
+      var character = String.fromCharCode(bytes[byteIndex]);
+      var joined = phrase + character;
+      if (dict.has(joined)) {
+        phrase = joined;
+      } else {
+        if (phrase) codes.push(dict.get(phrase));
+        if (nextCode <= 65535) dict.set(joined, nextCode);
+        nextCode += 1;
+        phrase = character;
+      }
+    }
+    if (phrase) codes.push(dict.get(phrase));
+    if (codes.some(function tooLarge(code) { return code > 65535; })) return null;
+    var packed = new Uint8Array(codes.length * 2);
+    codes.forEach(function pack(code, index) {
+      packed[index * 2] = code >> 8;
+      packed[index * 2 + 1] = code & 255;
+    });
+    return packed;
+  }
+
+  function lzwDecompressBytes(bytes) {
+    if (!bytes.length || bytes.length % 2) throw new Error("Invalid compact share data.");
+    var codes = [];
+    for (var index = 0; index < bytes.length; index += 2) {
+      codes.push((bytes[index] << 8) | bytes[index + 1]);
+    }
+    var dict = [];
+    for (var seed = 0; seed < 256; seed += 1) {
+      dict[seed] = String.fromCharCode(seed);
+    }
+    var previous = dict[codes[0]];
+    var output = previous || "";
+    var nextCode = 256;
+    for (var codeIndex = 1; codeIndex < codes.length; codeIndex += 1) {
+      var code = codes[codeIndex];
+      var entry = dict[code];
+      if (!entry && code === nextCode) entry = previous + previous.charAt(0);
+      if (!entry) throw new Error("Invalid compact share data.");
+      output += entry;
+      dict[nextCode] = previous + entry.charAt(0);
+      nextCode += 1;
+      previous = entry;
+    }
+    var result = new Uint8Array(output.length);
+    for (var charIndex = 0; charIndex < output.length; charIndex += 1) {
+      result[charIndex] = output.charCodeAt(charIndex);
+    }
+    return result;
+  }
+
+  function textToBytes(text) {
+    if (window.TextEncoder) return new TextEncoder().encode(text);
+    var encoded = unescape(encodeURIComponent(text));
+    var bytes = new Uint8Array(encoded.length);
+    for (var index = 0; index < encoded.length; index += 1) {
+      bytes[index] = encoded.charCodeAt(index);
+    }
+    return bytes;
+  }
+
+  function bytesToText(bytes) {
+    if (window.TextDecoder) return new TextDecoder().decode(bytes);
+    var binary = "";
+    for (var index = 0; index < bytes.length; index += 1) {
+      binary += String.fromCharCode(bytes[index]);
+    }
+    return decodeURIComponent(escape(binary));
+  }
+
+  async function compressText(text) {
+    if (!window.CompressionStream || !window.TextEncoder) return null;
+    var stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  async function decompressText(bytes) {
+    if (!window.DecompressionStream) return null;
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Response(stream).text();
+  }
+
+  async function encodeSharePayload(payload) {
     var json = JSON.stringify(payload);
-    if (window.TextEncoder) return bytesToBase64Url(new TextEncoder().encode(json));
-    return window.btoa(unescape(encodeURIComponent(json)))
+    var rawBytes = textToBytes(json);
+    var compact = lzwCompressBytes(rawBytes);
+    if (compact && compact.length < rawBytes.length) return "l." + bytesToBase64Url(compact);
+    var compressed = await compressText(json);
+    if (compressed && compressed.length < rawBytes.length) return "z." + bytesToBase64Url(compressed);
+    if (window.TextEncoder) return "j." + bytesToBase64Url(rawBytes);
+    return "b." + window.btoa(unescape(encodeURIComponent(json)))
       .replace(/\+/g, "-")
       .replace(/\//g, "_")
       .replace(/=+$/g, "");
   }
 
-  function decodeSharePayload(value) {
-    if (window.TextDecoder) {
-      return JSON.parse(new TextDecoder().decode(base64UrlToBytes(value)));
+  async function decodeSharePayload(value) {
+    var text = String(value || "");
+    var prefix = text.slice(0, 2);
+    var body = prefix.indexOf(".") === 1 ? text.slice(2) : text;
+    if (prefix === "z.") {
+      var decompressed = await decompressText(base64UrlToBytes(body));
+      if (!decompressed) throw new Error("This browser cannot open compressed share links.");
+      return JSON.parse(decompressed);
     }
-    var base64 = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    if (prefix === "l.") {
+      return JSON.parse(bytesToText(lzwDecompressBytes(base64UrlToBytes(body))));
+    }
+    if (window.TextDecoder) {
+      return JSON.parse(new TextDecoder().decode(base64UrlToBytes(body)));
+    }
+    var base64 = body.replace(/-/g, "+").replace(/_/g, "/");
     while (base64.length % 4) base64 += "=";
     return JSON.parse(decodeURIComponent(escape(window.atob(base64))));
   }
 
-  function buildShareUrl(includePhotos) {
+  async function buildShareUrl(includePhotos) {
     var url = new URL(window.location.href);
     url.search = "";
-    url.hash = "tree=" + encodeSharePayload(makeSharePayload(includePhotos));
+    url.hash = "u=" + await encodeSharePayload(makeSharePayload(includePhotos));
     return url.toString();
   }
 
@@ -2963,9 +3071,29 @@
     return url.toString();
   }
 
+  function buildCleanInviteLink() {
+    var url = new URL(window.location.href);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  }
+
+  function copyInviteLink() {
+    var message = [
+      "Family Tree",
+      "",
+      "Please help fill in names, dates, places and photos:",
+      buildCleanInviteLink(),
+      "",
+      "If I sent a share file too, open this link and choose Share, then Import share file."
+    ].join("\n");
+    copyShareLink(message, "Neat invite copied");
+    setShareStatus("Neat invite copied. Send it with a share file when you want them to see and edit this exact tree.");
+  }
+
   function openShareDialog() {
     if (!els.shareDialog) return;
-    setShareStatus("People can edit their copy, then send you an update link or share file back.");
+    setShareStatus("For family, send the neat invite. For the actual tree and photos, send a share file too.");
     els.shareDialog.showModal();
   }
 
@@ -2990,18 +3118,12 @@
     setShareStatus("Profile link copied. This points people to the selected frame without replacing their saved tree.");
   }
 
-  function copyTreeUpdateLink() {
-    var fullUrl = buildShareUrl(true);
-    var copiedPhotos = true;
-    var url = fullUrl;
-    if (fullUrl.length > SHARE_LINK_MAX_LENGTH) {
-      url = buildShareUrl(false);
-      copiedPhotos = false;
-    }
-    copyShareLink(url, "Update link copied");
-    setShareStatus(copiedPhotos
-      ? "Update link copied. Anyone who opens it can import this tree."
-      : "Copied a smaller update link without photos. Use Download share file when photos matter.");
+  async function copyTreeUpdateLink() {
+    var url = await buildShareUrl(false);
+    copyShareLink(url, "Compact update copied");
+    setShareStatus(url.length <= SHARE_LINK_MAX_LENGTH
+      ? "Compact text-only update copied. It excludes photos so it stays smaller."
+      : "Compact update copied, but it is still long. A share file will look better for this tree.");
   }
 
   function downloadShareFile() {
@@ -3042,18 +3164,18 @@
   }
 
   function promptForShareLink(url) {
-    window.prompt("Copy this share link", url);
+    window.prompt("Copy this share", url);
     showToast("Ready to copy", false);
   }
 
-  function applyIncomingShareLink() {
+  async function applyIncomingShareLink() {
     var params = new URLSearchParams(window.location.search);
     var hash = window.location.hash ? window.location.hash.slice(1) : "";
     var hashParams = new URLSearchParams(hash);
-    var sharedTree = hashParams.get("tree") || params.get("tree");
+    var sharedTree = hashParams.get("u") || hashParams.get("tree") || params.get("tree");
     if (sharedTree) {
       try {
-        var share = normalizeSharePayload(decodeSharePayload(sharedTree));
+        var share = normalizeSharePayload(await decodeSharePayload(sharedTree));
         if (confirmImportSharedTree(share)) {
           importSharedTree(share, "Imported shared tree");
           var cleanUrl = new URL(window.location.href);
@@ -3251,6 +3373,7 @@
     els.saveButton.addEventListener("click", saveNow);
     if (els.headerSaveButton) els.headerSaveButton.addEventListener("click", saveNow);
     els.shareButton.addEventListener("click", openShareDialog);
+    if (els.copyInviteLinkButton) els.copyInviteLinkButton.addEventListener("click", copyInviteLink);
     if (els.copyTreeLinkButton) els.copyTreeLinkButton.addEventListener("click", copyTreeUpdateLink);
     if (els.downloadTreeFileButton) els.downloadTreeFileButton.addEventListener("click", downloadShareFile);
     if (els.copyProfileLinkButton) els.copyProfileLinkButton.addEventListener("click", copyProfileLink);
@@ -3581,10 +3704,14 @@
     });
   }
 
-  loadSavedState();
-  applyIncomingShareLink();
-  rememberDailySnapshot();
-  bindEvents();
-  renderAll();
-  initialCenter();
+  async function startApp() {
+    loadSavedState();
+    await applyIncomingShareLink();
+    rememberDailySnapshot();
+    bindEvents();
+    renderAll();
+    initialCenter();
+  }
+
+  startApp();
 })();
